@@ -15,10 +15,13 @@
             NoLeftClickDelay="True">
             <tray:TaskbarIcon.ContextFlyout>
                 <MenuFlyout>
-                    <MenuFlyoutItem Text="Aufnahme starten / stoppen" Click="OnTrayToggle" />
+                    <MenuFlyoutItem Text="Aufnahme starten / stoppen"
+                                    Command="{x:Bind ToggleCommand}" />
                     <MenuFlyoutSeparator />
-                    <MenuFlyoutItem Text="Fenster zeigen" Click="OnTrayShow" />
-                    <MenuFlyoutItem Text="Beenden" Click="OnTrayQuit" />
+                    <MenuFlyoutItem Text="Fenster zeigen"
+                                    Command="{x:Bind ShowWindowCommand}" />
+                    <MenuFlyoutItem Text="Beenden"
+                                    Command="{x:Bind QuitCommand}" />
                 </MenuFlyout>
             </tray:TaskbarIcon.ContextFlyout>
         </tray:TaskbarIcon>
@@ -233,6 +236,8 @@
                         </StackPanel>
 
                         <StackPanel Grid.Row="8" Spacing="6" Orientation="Horizontal">
+                            <CheckBox x:Name="AutoStartCheck" Content="Mit Windows starten"
+                                      Click="OnAutoStartToggle" />
                             <CheckBox x:Name="HudEnabledCheck" Content="HUD anzeigen" Click="OnFieldChanged" />
                             <ComboBox x:Name="HudPositionCombo" Width="180" SelectionChanged="OnFieldChanged">
                                 <ComboBoxItem Content="Oben links" Tag="TopLeft" />

@@ -17,6 +17,7 @@ public partial class App : Application
     public ServerApiClient ServerApi { get; } = new();
     public HotkeyManager Hotkey { get; } = new();
     public UpdateService Updates { get; } = new();
+    public AutoStartService AutoStart { get; } = new();
     public RecordingCoordinator Coordinator { get; private set; } = null!;
 
     public MainWindow? MainWindow { get; private set; }

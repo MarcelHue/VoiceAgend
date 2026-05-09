@@ -18,6 +18,7 @@
     <LangVersion>latest</LangVersion>
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <Version>1.0.0</Version>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <!-- Wird vom CI-Workflow per -p:UpdateRepoUrl=https://github.com/<owner>/<repo> überschrieben. -->
     <UpdateRepoUrl Condition="'$(UpdateRepoUrl)' == ''"></UpdateRepoUrl>
@@ -46,6 +47,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Assets\TrayRecording.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\AppIcon.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

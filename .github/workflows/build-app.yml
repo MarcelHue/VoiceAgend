@@ -80,6 +80,7 @@ jobs:
             --token ${{ secrets.GITHUB_TOKEN }} `
             --releaseName "VoiceAgend v${{ steps.version.outputs.version }}" `
             --tag v${{ steps.version.outputs.version }} `
+            --publish `
             --merge
 
       - name: Upload build artifacts (debug)

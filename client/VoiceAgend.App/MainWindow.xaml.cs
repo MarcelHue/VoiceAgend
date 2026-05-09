@@ -1,3 +1,4 @@
+using System.IO;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -6,7 +7,6 @@ using System.Windows.Input;
 using Windows.System;
 using VoiceAgend.App.Models;
 using VoiceAgend.App.Services;
-// for HudState reference
 
 
 namespace VoiceAgend.App;
@@ -16,6 +16,8 @@ public sealed partial class MainWindow : Window
     private bool _recordingHotkey;
 
     public ICommand ShowWindowCommand { get; }
+    public ICommand ToggleCommand { get; }
+    public ICommand QuitCommand { get; }
 
     private bool _suppressAutoSave;
     private bool _quitting;
@@ -25,6 +27,8 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         Title = "VoiceAgend";
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 1440));
+        try { AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico")); }
+        catch (Exception ex) { Logger.Warn("SetIcon: " + ex.Message); }
         Activated += (_, _) =>
         {
             _suppressAutoSave = true;
@@ -47,6 +51,8 @@ public sealed partial class MainWindow : Window
             DispatcherQueue.TryEnqueue(() => ShowUpdateStatus(st));
 
         ShowWindowCommand = new RelayCommand(_ => Activate());
+        ToggleCommand = new RelayCommand(async _ => await App.Current.Coordinator.ToggleAsync());
+        QuitCommand = new RelayCommand(_ => DoQuit());
 
         // Capture key presses on the window when in hotkey-record mode
         if (Content is FrameworkElement fe)
@@ -98,6 +104,7 @@ public sealed partial class MainWindow : Window
         VolumeSlider.Value = s.SoundVolume;
         VolumeLabel.Text = $"Lautstärke: {s.SoundVolume}%";
 
+        AutoStartCheck.IsChecked = App.Current.AutoStart.IsEnabled;
         HudEnabledCheck.IsChecked = s.HudEnabled;
         foreach (ComboBoxItem it in HudPositionCombo.Items)
         {
@@ -114,6 +121,15 @@ public sealed partial class MainWindow : Window
     {
         AutoSave();
         App.Current.Hud?.Show(HudState.Recording, "HUD-Vorschau");
+    }
+
+    private void OnAutoStartToggle(object sender, RoutedEventArgs e)
+    {
+        var enable = AutoStartCheck.IsChecked == true;
+        App.Current.AutoStart.SetEnabled(enable);
+        StatusText.Text = enable
+            ? "Auto-Start aktiviert."
+            : "Auto-Start deaktiviert.";
     }
 
     private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -410,16 +426,25 @@ public sealed partial class MainWindow : Window
 
     private void OnTrayShow(object sender, RoutedEventArgs e) => Activate();
 
-    private void OnTrayQuit(object sender, RoutedEventArgs e)
+    private void OnTrayQuit(object sender, RoutedEventArgs e) => DoQuit();
+
+    private void DoQuit()
     {
+        Logger.Info("Quit requested via tray menu");
         _quitting = true;
         try { App.Current.Hotkey.Dispose(); } catch { }
         try { App.Current.HudWindow?.Close(); } catch { }
         try { TrayIcon.Dispose(); } catch { }
         try { Application.Current.Exit(); } catch { }
-        // Hard-Exit als Fallback — WinUI-3-Unpackaged hängt sonst gerne an
-        // Background-Threads (Hotkey-Loop, NAudio, Velopack).
-        Environment.Exit(0);
+        // Wenn Application.Exit nicht greift: Prozess hart killen.
+        try
+        {
+            System.Diagnostics.Process.GetCurrentProcess().Kill();
+        }
+        catch
+        {
+            Environment.Exit(0);
+        }
     }
 
     private void UpdateTrayState()
@@ -436,10 +461,20 @@ public sealed partial class MainWindow : Window
 
     private sealed class RelayCommand : ICommand
     {
-        private readonly Action<object?> _exec;
+        private readonly Action<object?>? _exec;
+        private readonly Func<object?, Task>? _execAsync;
         public RelayCommand(Action<object?> exec) => _exec = exec;
+        public RelayCommand(Func<object?, Task> exec) => _execAsync = exec;
         public bool CanExecute(object? p) => true;
-        public void Execute(object? p) => _exec(p);
+        public void Execute(object? p)
+        {
+            try
+            {
+                if (_exec is not null) _exec(p);
+                else if (_execAsync is not null) _ = _execAsync(p);
+            }
+            catch (Exception ex) { Logger.Error("RelayCommand", ex); }
+        }
         public event EventHandler? CanExecuteChanged { add { } remove { } }
     }
 }
