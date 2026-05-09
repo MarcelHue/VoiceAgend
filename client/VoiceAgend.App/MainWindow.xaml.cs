@@ -18,6 +18,7 @@ public sealed partial class MainWindow : Window
     public ICommand ShowWindowCommand { get; }
 
     private bool _suppressAutoSave;
+    private bool _quitting;
 
     public MainWindow()
     {
@@ -341,7 +342,8 @@ public sealed partial class MainWindow : Window
 
     private void OnWindowClosed(object sender, WindowEventArgs e)
     {
-        // Verstecke statt zu beenden — über Tray-Menü "Beenden" wird wirklich beendet
+        // Verstecke statt zu beenden — über Tray-Menü "Beenden" setzen wir _quitting=true
+        if (_quitting) return;
         e.Handled = true;
         AppWindow.Hide();
     }
@@ -410,7 +412,10 @@ public sealed partial class MainWindow : Window
 
     private void OnTrayQuit(object sender, RoutedEventArgs e)
     {
-        TrayIcon.Dispose();
+        _quitting = true;
+        try { App.Current.Hotkey.Dispose(); } catch { }
+        try { App.Current.HudWindow?.Close(); } catch { }
+        try { TrayIcon.Dispose(); } catch { }
         Application.Current.Exit();
     }
 
