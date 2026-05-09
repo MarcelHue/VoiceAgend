@@ -23,7 +23,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         Title = "VoiceAgend";
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 1440));
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 1440));
         Activated += (_, _) =>
         {
             _suppressAutoSave = true;
@@ -88,8 +88,14 @@ public sealed partial class MainWindow : Window
         if (OutputModeCombo.SelectedItem == null) OutputModeCombo.SelectedIndex = 0;
 
         ToastCheck.IsChecked = s.ShowToastOnResult;
-        SoundStartCheck.IsChecked = s.PlaySoundOnStart;
-        SoundStopCheck.IsChecked = s.PlaySoundOnStop;
+
+        // Sound-Combos befüllen + Auswahl setzen
+        InitSoundCombo(SoundStartCombo, s.SoundOnStart);
+        InitSoundCombo(SoundStopCombo, s.SoundOnStop);
+        InitSoundCombo(SoundDoneCombo, s.SoundOnDone);
+        InitSoundCombo(SoundErrorCombo, s.SoundOnError);
+        VolumeSlider.Value = s.SoundVolume;
+        VolumeLabel.Text = $"Lautstärke: {s.SoundVolume}%";
 
         HudEnabledCheck.IsChecked = s.HudEnabled;
         foreach (ComboBoxItem it in HudPositionCombo.Items)
@@ -232,8 +238,12 @@ public sealed partial class MainWindow : Window
             s.OutputMode = mode;
 
         s.ShowToastOnResult = ToastCheck.IsChecked == true;
-        s.PlaySoundOnStart = SoundStartCheck.IsChecked == true;
-        s.PlaySoundOnStop = SoundStopCheck.IsChecked == true;
+
+        s.SoundOnStart = ReadSoundCombo(SoundStartCombo);
+        s.SoundOnStop = ReadSoundCombo(SoundStopCombo);
+        s.SoundOnDone = ReadSoundCombo(SoundDoneCombo);
+        s.SoundOnError = ReadSoundCombo(SoundErrorCombo);
+        s.SoundVolume = (int)VolumeSlider.Value;
 
         s.HudEnabled = HudEnabledCheck.IsChecked == true;
         if (HudPositionCombo.SelectedItem is ComboBoxItem hci && hci.Tag is string htag &&
@@ -247,6 +257,41 @@ public sealed partial class MainWindow : Window
 
     private void OnFieldLostFocus(object sender, RoutedEventArgs e) => AutoSave();
     private void OnFieldChanged(object sender, object e) => AutoSave();
+
+    private static void InitSoundCombo(ComboBox combo, SoundChoice selected)
+    {
+        if (combo.Items.Count == 0)
+        {
+            foreach (var c in SoundService.AllChoices)
+                combo.Items.Add(new ComboBoxItem { Content = SoundService.Display(c), Tag = c });
+        }
+        foreach (ComboBoxItem item in combo.Items)
+        {
+            if (item.Tag is SoundChoice c && c == selected) { combo.SelectedItem = item; return; }
+        }
+        combo.SelectedIndex = 0;
+    }
+
+    private static SoundChoice ReadSoundCombo(ComboBox combo) =>
+        combo.SelectedItem is ComboBoxItem ci && ci.Tag is SoundChoice c ? c : SoundChoice.None;
+
+    private void OnVolumeChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        VolumeLabel.Text = $"Lautstärke: {(int)VolumeSlider.Value}%";
+        AutoSave();
+    }
+
+    private void OnPlayStart(object sender, RoutedEventArgs e)
+        => App.Current.Sounds.Play(ReadSoundCombo(SoundStartCombo), (int)VolumeSlider.Value);
+
+    private void OnPlayStop(object sender, RoutedEventArgs e)
+        => App.Current.Sounds.Play(ReadSoundCombo(SoundStopCombo), (int)VolumeSlider.Value);
+
+    private void OnPlayDone(object sender, RoutedEventArgs e)
+        => App.Current.Sounds.Play(ReadSoundCombo(SoundDoneCombo), (int)VolumeSlider.Value);
+
+    private void OnPlayError(object sender, RoutedEventArgs e)
+        => App.Current.Sounds.Play(ReadSoundCombo(SoundErrorCombo), (int)VolumeSlider.Value);
 
     private void OnHotkeyRecord(object sender, RoutedEventArgs e)
     {

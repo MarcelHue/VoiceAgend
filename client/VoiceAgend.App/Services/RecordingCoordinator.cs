@@ -1,4 +1,3 @@
-using System.Media;
 using VoiceAgend.App.Models;
 
 namespace VoiceAgend.App.Services;
@@ -12,6 +11,7 @@ public sealed class RecordingCoordinator
     private readonly AudioCaptureService _audio;
     private readonly TranscriptionClient _client;
     private readonly OutputService _output;
+    private readonly SoundService _sound;
     private readonly Func<AppSettings> _settingsProvider;
 
     public event Action<string>? StatusChanged;
@@ -27,11 +27,13 @@ public sealed class RecordingCoordinator
         AudioCaptureService audio,
         TranscriptionClient client,
         OutputService output,
+        SoundService sound,
         Func<AppSettings> settingsProvider)
     {
         _audio = audio;
         _client = client;
         _output = output;
+        _sound = sound;
         _settingsProvider = settingsProvider;
     }
 
@@ -47,13 +49,14 @@ public sealed class RecordingCoordinator
             {
                 Logger.Info($"Start recording, device={s.MicDeviceNumber}");
                 _audio.Start(s.MicDeviceNumber);
-                if (s.PlaySoundOnStart) PlayStart();
+                _sound.Play(s.SoundOnStart, s.SoundVolume);
                 StatusChanged?.Invoke("Aufnahme läuft…");
                 StateChanged?.Invoke();
             }
             catch (Exception ex)
             {
                 Logger.Error("Mic start failed", ex);
+                _sound.Play(s.SoundOnError, s.SoundVolume);
                 StatusChanged?.Invoke($"Mic-Fehler: {ex.GetType().Name}: {ex.Message}");
             }
             return;
@@ -65,7 +68,7 @@ public sealed class RecordingCoordinator
         try
         {
             var audio = _audio.Stop();
-            if (s.PlaySoundOnStop) PlayStop();
+            _sound.Play(s.SoundOnStop, s.SoundVolume);
             StateChanged?.Invoke();
 
             if (audio.Length < 1024)
@@ -90,12 +93,14 @@ public sealed class RecordingCoordinator
             LastTranscript = result.Text;
             TranscriptReceived?.Invoke(result.Text);
             _output.Dispatch(s.OutputMode, result.Text, s.ShowToastOnResult);
+            _sound.Play(s.SoundOnDone, s.SoundVolume);
             StatusChanged?.Invoke($"Fertig ({result.ProcessingMs} ms).");
         }
         catch (Exception ex)
         {
             Logger.Error("Transcription failed", ex);
             var msg = string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message;
+            _sound.Play(s.SoundOnError, s.SoundVolume);
             StatusChanged?.Invoke($"Fehler: {ex.GetType().Name}: {msg}");
         }
         finally
@@ -104,7 +109,4 @@ public sealed class RecordingCoordinator
             StateChanged?.Invoke();
         }
     }
-
-    private static void PlayStart() => SystemSounds.Asterisk.Play();
-    private static void PlayStop() => SystemSounds.Beep.Play();
 }

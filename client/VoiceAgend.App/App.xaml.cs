@@ -13,6 +13,7 @@ public partial class App : Application
     public AudioCaptureService Audio { get; } = new();
     public TranscriptionClient Client { get; } = new();
     public OutputService Output { get; } = new();
+    public SoundService Sounds { get; } = new();
     public ServerApiClient ServerApi { get; } = new();
     public HotkeyManager Hotkey { get; } = new();
     public UpdateService Updates { get; } = new();
@@ -38,7 +39,7 @@ public partial class App : Application
         };
 
         Settings = SettingsStore.Load();
-        Coordinator = new RecordingCoordinator(Audio, Client, Output, () => Settings);
+        Coordinator = new RecordingCoordinator(Audio, Client, Output, Sounds, () => Settings);
 
         MainWindow = new MainWindow();
         Output.AttachUiThread(MainWindow.DispatcherQueue);

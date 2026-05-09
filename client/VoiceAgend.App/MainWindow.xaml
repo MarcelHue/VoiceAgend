@@ -191,10 +191,45 @@
                             </ComboBox>
                         </StackPanel>
 
-                        <StackPanel Grid.Row="7" Spacing="6" Orientation="Horizontal">
+                        <StackPanel Grid.Row="7" Spacing="10">
                             <CheckBox x:Name="ToastCheck" Content="Toast bei Ergebnis" Click="OnFieldChanged" />
-                            <CheckBox x:Name="SoundStartCheck" Content="Ton bei Start" Click="OnFieldChanged" />
-                            <CheckBox x:Name="SoundStopCheck" Content="Ton bei Stop" Click="OnFieldChanged" />
+
+                            <TextBlock Text="Sounds" Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <Grid ColumnSpacing="12" RowSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="200" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Aufnahme startet" VerticalAlignment="Center" />
+                                <ComboBox Grid.Row="0" Grid.Column="1" x:Name="SoundStartCombo" HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
+                                <Button Grid.Row="0" Grid.Column="2" Content="Probehören" Click="OnPlayStart" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Aufnahme stoppt" VerticalAlignment="Center" />
+                                <ComboBox Grid.Row="1" Grid.Column="1" x:Name="SoundStopCombo" HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
+                                <Button Grid.Row="1" Grid.Column="2" Content="Probehören" Click="OnPlayStop" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Transkript fertig" VerticalAlignment="Center" />
+                                <ComboBox Grid.Row="2" Grid.Column="1" x:Name="SoundDoneCombo" HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
+                                <Button Grid.Row="2" Grid.Column="2" Content="Probehören" Click="OnPlayDone" />
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Fehler" VerticalAlignment="Center" />
+                                <ComboBox Grid.Row="3" Grid.Column="1" x:Name="SoundErrorCombo" HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
+                                <Button Grid.Row="3" Grid.Column="2" Content="Probehören" Click="OnPlayError" />
+                            </Grid>
+
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock x:Name="VolumeLabel" Text="Lautstärke: 70%" VerticalAlignment="Center" Width="160" />
+                                <Slider x:Name="VolumeSlider" Width="240" Minimum="0" Maximum="100"
+                                        StepFrequency="5" ValueChanged="OnVolumeChanged" />
+                            </StackPanel>
                         </StackPanel>
 
                         <StackPanel Grid.Row="8" Spacing="6" Orientation="Horizontal">

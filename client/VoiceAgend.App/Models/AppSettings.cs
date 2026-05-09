@@ -14,6 +14,17 @@ public enum HudPosition
     BottomLeft, BottomCenter, BottomRight,
 }
 
+public enum SoundChoice
+{
+    None,
+    Chimes,
+    Chord,
+    Ding,
+    Notify,
+    Tada,
+    Beep,
+}
+
 public sealed class AppSettings
 {
     public string ServerUrl { get; set; } = "";
@@ -31,8 +42,17 @@ public sealed class AppSettings
 
     public OutputMode OutputMode { get; set; } = OutputMode.Clipboard;
     public bool ShowToastOnResult { get; set; } = true;
-    public bool PlaySoundOnStart { get; set; } = true;
-    public bool PlaySoundOnStop { get; set; } = true;
+
+    // Sound pro Event + globale Lautstärke
+    public SoundChoice SoundOnStart { get; set; } = SoundChoice.Ding;
+    public SoundChoice SoundOnStop { get; set; } = SoundChoice.Chord;
+    public SoundChoice SoundOnDone { get; set; } = SoundChoice.Chimes;
+    public SoundChoice SoundOnError { get; set; } = SoundChoice.Beep;
+    public int SoundVolume { get; set; } = 70; // 0–100
+
+    // Legacy (werden ignoriert, nur für Settings-Migration ohne Crash)
+    public bool? PlaySoundOnStart { get; set; }
+    public bool? PlaySoundOnStop { get; set; }
 
     public bool HudEnabled { get; set; } = true;
     public HudPosition HudPosition { get; set; } = HudPosition.TopRight;
