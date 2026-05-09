@@ -416,7 +416,10 @@ public sealed partial class MainWindow : Window
         try { App.Current.Hotkey.Dispose(); } catch { }
         try { App.Current.HudWindow?.Close(); } catch { }
         try { TrayIcon.Dispose(); } catch { }
-        Application.Current.Exit();
+        try { Application.Current.Exit(); } catch { }
+        // Hard-Exit als Fallback — WinUI-3-Unpackaged hängt sonst gerne an
+        // Background-Threads (Hotkey-Loop, NAudio, Velopack).
+        Environment.Exit(0);
     }
 
     private void UpdateTrayState()
