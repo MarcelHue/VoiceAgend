@@ -126,6 +126,16 @@ Voraussetzungen: .NET 9 SDK, Windows App SDK 1.6 Runtime (oder `WindowsAppSDKSel
 4. Server: `{"status":"processing"}`
 5. Server: `{"text":"…","language":"de","processing_ms":980}` und schließt
 
+## Code Signing
+
+Aktuell ist der Installer **nicht signiert**. Beim Ausführen zeigt Windows SmartScreen
+eine Warnung — über **„Weitere Informationen" → „Trotzdem ausführen"** lässt sich der
+Installer starten.
+
+Eine Bewerbung bei der [SignPath Foundation](https://signpath.org/apply) für kostenloses
+OSS-Code-Signing läuft. Sobald genehmigt, werden zukünftige Releases signiert ausgeliefert
+und SmartScreen-Warnungen entfallen.
+
 ## Lizenz
 
 Pro Komponente unterschiedlich — siehe [LICENSE](LICENSE) für die Übersicht:
