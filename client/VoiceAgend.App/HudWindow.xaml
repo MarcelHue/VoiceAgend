@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="VoiceAgend.App.HudWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid x:Name="Root" Padding="12">
+        <Grid.Background>
+            <SolidColorBrush x:Name="BgBrush" Color="#FF202020" />
+        </Grid.Background>
+        <StackPanel x:Name="ContentRow" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <Ellipse x:Name="Dot" Width="14" Height="14" Opacity="0.8">
+                <Ellipse.Fill>
+                    <SolidColorBrush x:Name="DotBrush" Color="#FF888888" />
+                </Ellipse.Fill>
+            </Ellipse>
+            <TextBlock x:Name="Label"
+                       Foreground="White"
+                       FontWeight="SemiBold"
+                       FontSize="14"
+                       VerticalAlignment="Center"
+                       Text="Bereit" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,92 @@
+name: Build & Release App
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'client/**'
+      - '.github/workflows/build-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Determine version
+        id: version
+        shell: pwsh
+        run: |
+          $v = "1.0.$($env:GITHUB_RUN_NUMBER)"
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Building version $v"
+
+      - name: Install Velopack CLI
+        run: dotnet tool install --global vpk
+
+      - name: Restore
+        run: dotnet restore client/VoiceAgend.sln
+
+      - name: Publish App (self-contained)
+        shell: pwsh
+        run: |
+          dotnet publish client/VoiceAgend.App/VoiceAgend.App.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained `
+            -p:WindowsPackageType=None `
+            -p:WindowsAppSDKSelfContained=true `
+            -p:Version=${{ steps.version.outputs.version }} `
+            -p:UpdateRepoUrl=https://github.com/${{ github.repository }} `
+            -p:PublishSingleFile=false `
+            -o publish
+
+      - name: Download previous Velopack releases (for delta)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory -Force -Path releases | Out-Null
+          vpk download github `
+            --repoUrl https://github.com/${{ github.repository }} `
+            -o releases
+
+      - name: Pack with Velopack
+        shell: pwsh
+        run: |
+          vpk pack `
+            --packId VoiceAgend `
+            --packVersion ${{ steps.version.outputs.version }} `
+            --packDir publish `
+            --mainExe VoiceAgend.App.exe `
+            --packTitle "VoiceAgend" `
+            --packAuthors "Marcel" `
+            --outputDir releases
+
+      - name: Upload to GitHub Release
+        shell: pwsh
+        run: |
+          vpk upload github `
+            --repoUrl https://github.com/${{ github.repository }} `
+            --token ${{ secrets.GITHUB_TOKEN }} `
+            --releaseName "VoiceAgend v${{ steps.version.outputs.version }}" `
+            --tag v${{ steps.version.outputs.version }} `
+            --merge
+
+      - name: Upload build artifacts (debug)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            publish/
+            releases/

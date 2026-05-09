@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+server/data/
+server/.env
+*.db
+.vs/
+.idea/
+.vscode/
+.cursor/
+.claude/
+bin/
+obj/
+publish/
+releases/

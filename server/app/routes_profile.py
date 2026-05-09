@@ -1,0 +1,99 @@
+from typing import Annotated
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .config import settings
+from .db import ApiKey, Profile, User, get_session
+from .security import require_api_key
+
+router = APIRouter(prefix="/api/v1", tags=["profile"])
+
+
+class ModelOut(BaseModel):
+    id: str
+    object: str | None = None
+    owned_by: str | None = None
+
+
+class ProfileOut(BaseModel):
+    api_key_id: int
+    api_key_name: str
+    model: str | None
+    prompt: str | None
+    temperature: float
+
+
+class ProfileUpdate(BaseModel):
+    model: str | None = Field(default=None, max_length=255)
+    prompt: str | None = Field(default=None, max_length=4000)
+    temperature: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+@router.get("/models", response_model=list[ModelOut])
+async def list_models(_: Annotated[tuple[ApiKey, User], Depends(require_api_key)]):
+    """Whisper-Modelle vom Speaches-Backend (gecacht/lokal verfügbar)."""
+    headers = {}
+    if settings.whisper_api_key:
+        headers["Authorization"] = f"Bearer {settings.whisper_api_key}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0, headers=headers) as c:
+            r = await c.get(f"{settings.whisper_url.rstrip('/')}/v1/models")
+            r.raise_for_status()
+            data = r.json().get("data", [])
+            return [ModelOut(**m) for m in data]
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"whisper backend unreachable: {e}")
+
+
+@router.get("/profile", response_model=ProfileOut)
+async def get_profile(
+    auth: Annotated[tuple[ApiKey, User], Depends(require_api_key)],
+    db: Annotated[AsyncSession, Depends(get_session)],
+):
+    api_key, _ = auth
+    return await _profile_for(api_key, db)
+
+
+@router.put("/profile", response_model=ProfileOut)
+async def update_profile(
+    payload: ProfileUpdate,
+    auth: Annotated[tuple[ApiKey, User], Depends(require_api_key)],
+    db: Annotated[AsyncSession, Depends(get_session)],
+):
+    api_key, _ = auth
+    profile = await _ensure_profile(api_key, db)
+    if payload.model is not None:
+        profile.model = payload.model or None
+    if payload.prompt is not None:
+        profile.prompt = payload.prompt or None
+    if payload.temperature is not None:
+        profile.temperature = payload.temperature
+    await db.commit()
+    await db.refresh(profile)
+    return await _profile_for(api_key, db)
+
+
+async def _ensure_profile(api_key: ApiKey, db: AsyncSession) -> Profile:
+    res = await db.execute(select(Profile).where(Profile.api_key_id == api_key.id))
+    p = res.scalar_one_or_none()
+    if p is None:
+        p = Profile(api_key_id=api_key.id, model=None, prompt=None, temperature=0.0)
+        db.add(p)
+        await db.commit()
+        await db.refresh(p)
+    return p
+
+
+async def _profile_for(api_key: ApiKey, db: AsyncSession) -> ProfileOut:
+    p = await _ensure_profile(api_key, db)
+    return ProfileOut(
+        api_key_id=api_key.id,
+        api_key_name=api_key.name,
+        model=p.model,
+        prompt=p.prompt,
+        temperature=p.temperature,
+    )

@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="VoiceAgend.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:tray="using:H.NotifyIcon">
+
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+        <tray:TaskbarIcon
+            x:Name="TrayIcon"
+            IconSource="Assets/TrayIdle.ico"
+            ToolTipText="VoiceAgend"
+            LeftClickCommand="{x:Bind ShowWindowCommand}"
+            NoLeftClickDelay="True">
+            <tray:TaskbarIcon.ContextFlyout>
+                <MenuFlyout>
+                    <MenuFlyoutItem Text="Aufnahme starten / stoppen" Click="OnTrayToggle" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem Text="Fenster zeigen" Click="OnTrayShow" />
+                    <MenuFlyoutItem Text="Beenden" Click="OnTrayQuit" />
+                </MenuFlyout>
+            </tray:TaskbarIcon.ContextFlyout>
+        </tray:TaskbarIcon>
+
+        <NavigationView
+            x:Name="Nav"
+            PaneDisplayMode="Left"
+            IsBackButtonVisible="Collapsed"
+            IsSettingsVisible="False"
+            SelectionChanged="OnNavSelectionChanged"
+            OpenPaneLength="200"
+            IsPaneToggleButtonVisible="True">
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Transkript" Tag="home" Icon="Document" />
+                <NavigationViewItem Content="Server-Profil" Tag="profile" Icon="Globe" />
+                <NavigationViewItem Content="Einstellungen" Tag="settings" Icon="Setting" />
+            </NavigationView.MenuItems>
+
+            <Grid>
+                <!-- ========================== TRANSKRIPT-SEITE ========================== -->
+                <Grid x:Name="HomeView" Padding="24" RowSpacing="14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="Letztes Transkript" Style="{StaticResource TitleTextBlockStyle}" />
+
+                    <TextBlock Grid.Row="1" x:Name="HomeStatus"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap" />
+
+                    <TextBox Grid.Row="2"
+                             x:Name="TranscriptBox"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             IsReadOnly="False"
+                             VerticalContentAlignment="Top"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             FontSize="14"
+                             PlaceholderText="Hier erscheint das letzte Transkript. Du kannst es markieren, kopieren oder bearbeiten." />
+
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10">
+                        <Button Content="Kopieren" Click="OnCopyTranscript" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Leeren" Click="OnClearTranscript" />
+                        <Button Content="Aufnahme starten/stoppen" Click="OnTrayToggle" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- ========================== SERVER-PROFIL ========================== -->
+                <ScrollViewer x:Name="ProfileView" Visibility="Collapsed"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <Grid Padding="24" RowSpacing="14">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Text="Server-Profil"
+                                   Style="{StaticResource TitleTextBlockStyle}" />
+
+                        <TextBlock Grid.Row="1"
+                                   Text="Diese Einstellungen werden pro API-Key auf dem Server gespeichert und bei jeder Transkription verwendet."
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" />
+
+                        <StackPanel Grid.Row="2" Spacing="6" Orientation="Horizontal">
+                            <Button x:Name="ProfileLoadButton" Content="Vom Server laden" Click="OnProfileLoad" />
+                            <Button x:Name="ProfileSaveButton" Content="Speichern" Click="OnProfileSave"
+                                    Style="{StaticResource AccentButtonStyle}" />
+                            <TextBlock x:Name="ProfileStatus" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="3" Spacing="6">
+                            <TextBlock Text="Modell" />
+                            <ComboBox x:Name="ServerModelCombo" Width="500" HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="4" Spacing="6">
+                            <TextBlock Text="Initial-Prompt (biased Vokabular, Eigennamen, Stil)" />
+                            <TextBox x:Name="ServerPromptBox"
+                                     PlaceholderText="z. B. 'Marcel, VoiceAgend, TrueNAS, Speaches.'"
+                                     AcceptsReturn="True" TextWrapping="Wrap" Height="80" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="5" Spacing="6">
+                            <TextBlock x:Name="ServerTempLabel" Text="Temperature: 0.00" />
+                            <Slider x:Name="ServerTempSlider" Minimum="0" Maximum="1" StepFrequency="0.05"
+                                    Width="320" HorizontalAlignment="Left"
+                                    ValueChanged="OnTempChanged" />
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Text="0.0 = deterministisch (empfohlen für Diktat). Höhere Werte = freier formuliert, mehr Varianz." />
+                        </StackPanel>
+
+                        <TextBlock Grid.Row="6" x:Name="ProfileApiKeyLabel"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   FontStyle="Italic" />
+                    </Grid>
+                </ScrollViewer>
+
+                <!-- ========================== EINSTELLUNGEN ========================== -->
+                <ScrollViewer x:Name="SettingsView" Visibility="Collapsed"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <Grid Padding="24" RowSpacing="14">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Text="Einstellungen" Style="{StaticResource TitleTextBlockStyle}" />
+
+                        <StackPanel Grid.Row="1" Spacing="6">
+                            <TextBlock Text="Server-URL" />
+                            <TextBox x:Name="ServerUrlBox" PlaceholderText="wss://va.example.com/ws/transcribe"
+                                     LostFocus="OnFieldLostFocus" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="2" Spacing="6">
+                            <TextBlock Text="API-Key" />
+                            <PasswordBox x:Name="ApiKeyBox" LostFocus="OnFieldLostFocus" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="3" Spacing="6">
+                            <TextBlock Text="Sprache (z. B. de, en, leer = auto)" />
+                            <TextBox x:Name="LanguageBox" Width="120" HorizontalAlignment="Left"
+                                     LostFocus="OnFieldLostFocus" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="4" Spacing="6">
+                            <TextBlock Text="Mikrofon" />
+                            <ComboBox x:Name="MicCombo" Width="500" HorizontalAlignment="Left"
+                                      SelectionChanged="OnFieldChanged" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="5" Spacing="6">
+                            <TextBlock Text="Hotkey (Toggle: erst starten, dann stoppen)" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="HotkeyButton" Content="Hotkey aufzeichnen…" Click="OnHotkeyRecord" />
+                                <TextBlock x:Name="HotkeyDisplay" VerticalAlignment="Center"
+                                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="6" Spacing="6">
+                            <TextBlock Text="Ausgabe-Modus" />
+                            <ComboBox x:Name="OutputModeCombo" Width="240" HorizontalAlignment="Left"
+                                      SelectionChanged="OnFieldChanged">
+                                <ComboBoxItem Content="Zwischenablage" Tag="Clipboard" />
+                                <ComboBoxItem Content="Direkt tippen (in aktives Fenster)" Tag="Type" />
+                                <ComboBoxItem Content="Nur Benachrichtigung" Tag="Notification" />
+                            </ComboBox>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="7" Spacing="6" Orientation="Horizontal">
+                            <CheckBox x:Name="ToastCheck" Content="Toast bei Ergebnis" Click="OnFieldChanged" />
+                            <CheckBox x:Name="SoundStartCheck" Content="Ton bei Start" Click="OnFieldChanged" />
+                            <CheckBox x:Name="SoundStopCheck" Content="Ton bei Stop" Click="OnFieldChanged" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="8" Spacing="6" Orientation="Horizontal">
+                            <CheckBox x:Name="HudEnabledCheck" Content="HUD anzeigen" Click="OnFieldChanged" />
+                            <ComboBox x:Name="HudPositionCombo" Width="180" SelectionChanged="OnFieldChanged">
+                                <ComboBoxItem Content="Oben links" Tag="TopLeft" />
+                                <ComboBoxItem Content="Oben Mitte" Tag="TopCenter" />
+                                <ComboBoxItem Content="Oben rechts" Tag="TopRight" />
+                                <ComboBoxItem Content="Mitte links" Tag="MiddleLeft" />
+                                <ComboBoxItem Content="Mitte" Tag="MiddleCenter" />
+                                <ComboBoxItem Content="Mitte rechts" Tag="MiddleRight" />
+                                <ComboBoxItem Content="Unten links" Tag="BottomLeft" />
+                                <ComboBoxItem Content="Unten Mitte" Tag="BottomCenter" />
+                                <ComboBoxItem Content="Unten rechts" Tag="BottomRight" />
+                            </ComboBox>
+                            <Button Content="HUD-Vorschau" Click="OnHudPreview" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="9" Spacing="6">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button Content="In Tray minimieren" Click="OnMinimizeToTray" />
+                                <Button Content="Log öffnen" Click="OnOpenLog" />
+                                <Button Content="Server testen" Click="OnTestServer" />
+                                <Button Content="Auf Updates prüfen" Click="OnCheckUpdates" />
+                                <Button x:Name="ApplyUpdateButton" Content="Update installieren"
+                                        Click="OnApplyUpdate" Visibility="Collapsed"
+                                        Style="{StaticResource AccentButtonStyle}" />
+                            </StackPanel>
+                            <TextBlock x:Name="UpdateStatus"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock x:Name="StatusText" TextWrapping="Wrap" MaxWidth="900"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </Grid>
+        </NavigationView>
+    </Grid>
+</Window>

@@ -1,0 +1,30 @@
+# Compose-Datei zum Einfügen in TrueNAS SCALE → Apps → Custom App.
+# Datasets: HDDs/Applications/voiceagend/data
+# Owner: apps:apps (UID/GID 568) per ACL-Preset "Apps" setzen.
+#
+# Voraussetzung: Speaches-App ist auf demselben TrueNAS unter Port 8001 erreichbar.
+# Siehe whisper/docker-compose.truenas.yml
+
+services:
+  voiceagend:
+    # ghcr.io/<DEIN-GH-USER>/voiceagend-server:latest-cpu
+    image: ghcr.io/CHANGE-ME/voiceagend-server:latest-cpu
+    container_name: voiceagend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - /mnt/HDDs/Applications/voiceagend/data:/data
+    environment:
+      VOICEAGEND_WHISPER_URL: http://TRUENAS_IP:8001
+      VOICEAGEND_WHISPER_MODEL: Systran/faster-whisper-medium
+      # Falls in der Speaches-App API_KEY gesetzt ist, hier denselben Wert:
+      # VOICEAGEND_WHISPER_API_KEY: ein-langes-zufallsgeheimnis
+      VOICEAGEND_DEFAULT_LANGUAGE: de
+      VOICEAGEND_JWT_SECRET: BITTE-LANGES-ZUFALLSGEHEIMNIS-HIER
+      VOICEAGEND_ADMIN_USER: Admin
+      VOICEAGEND_ADMIN_PASSWORD: BITTE-AENDERN
+    deploy:
+      resources:
+        limits:
+          memory: 1G

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoiceAgend Dashboard</title>
+<link rel="stylesheet" href="/static/style.css">
+<script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
+</head>
+<body x-data="dashboard()" x-init="init()">
+
+<template x-if="!token">
+  <section class="login-card">
+    <h1>VoiceAgend</h1>
+    <p class="muted">Bitte anmelden</p>
+    <form @submit.prevent="login()">
+      <input type="text" x-model="loginForm.username" placeholder="Benutzername" required>
+      <input type="password" x-model="loginForm.password" placeholder="Passwort" required>
+      <button type="submit">Anmelden</button>
+      <p class="error" x-text="loginError" x-show="loginError"></p>
+    </form>
+  </section>
+</template>
+
+<template x-if="token">
+<div class="app">
+  <header>
+    <h1>VoiceAgend</h1>
+    <div>
+      <span x-text="me?.username"></span>
+      <span class="badge" x-show="me?.is_admin">admin</span>
+      <button @click="logout()" class="ghost">Abmelden</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button :class="{active: tab==='stats'}" @click="tab='stats'">Statistik</button>
+    <button :class="{active: tab==='keys'}" @click="tab='keys'; loadKeys()">API-Keys</button>
+    <button x-show="me?.is_admin" :class="{active: tab==='users'}" @click="tab='users'; loadUsers()">Benutzer</button>
+  </nav>
+
+  <section x-show="tab==='stats'" class="card">
+    <h2>Statistik</h2>
+    <div class="grid">
+      <div class="stat"><span class="label">Transkriptionen</span><span class="val" x-text="stats?.total_transcriptions ?? '–'"></span></div>
+      <div class="stat"><span class="label">Audio (s)</span><span class="val" x-text="(stats?.total_audio_seconds ?? 0).toFixed(1)"></span></div>
+      <div class="stat"><span class="label">Verarbeitung (s)</span><span class="val" x-text="(stats?.total_processing_seconds ?? 0).toFixed(1)"></span></div>
+      <div class="stat"><span class="label">Letzte 24h</span><span class="val" x-text="stats?.last_24h ?? '–'"></span></div>
+    </div>
+    <label><input type="checkbox" x-model="globalStats" @change="loadStats()" x-show="me?.is_admin"> Server-weit (admin)</label>
+  </section>
+
+  <section x-show="tab==='keys'" class="card">
+    <h2>Meine API-Keys</h2>
+    <form @submit.prevent="createKey()" class="row">
+      <input type="text" x-model="newKeyName" placeholder="Name (z.B. 'Laptop')" required>
+      <button type="submit">Erstellen</button>
+    </form>
+    <div class="alert" x-show="newKeyValue">
+      <strong>Einmalig anzeigen — kopiere den Schlüssel jetzt!</strong>
+      <code x-text="newKeyValue"></code>
+      <button @click="newKeyValue=''" class="ghost">Schließen</button>
+    </div>
+    <table>
+      <thead><tr><th>Name</th><th>Prefix</th><th>Erstellt</th><th>Zuletzt benutzt</th><th></th></tr></thead>
+      <tbody>
+        <template x-for="k in keys" :key="k.id">
+          <tr>
+            <td x-text="k.name"></td>
+            <td><code x-text="k.prefix + '…'"></code></td>
+            <td x-text="formatDate(k.created_at)"></td>
+            <td x-text="k.last_used_at ? formatDate(k.last_used_at) : '–'"></td>
+            <td><button @click="deleteKey(k.id)" class="danger">Löschen</button></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </section>
+
+  <section x-show="tab==='users' && me?.is_admin" class="card">
+    <h2>Benutzerverwaltung</h2>
+    <form @submit.prevent="createUser()" class="row">
+      <input type="text" x-model="newUser.username" placeholder="Benutzername" required>
+      <input type="password" x-model="newUser.password" placeholder="Passwort (min. 8)" required>
+      <label><input type="checkbox" x-model="newUser.is_admin"> Admin</label>
+      <button type="submit">Anlegen</button>
+    </form>
+    <table>
+      <thead><tr><th>ID</th><th>Benutzer</th><th>Admin</th><th>Aktiv</th><th>Erstellt</th><th></th></tr></thead>
+      <tbody>
+        <template x-for="u in users" :key="u.id">
+          <tr>
+            <td x-text="u.id"></td>
+            <td x-text="u.username"></td>
+            <td><input type="checkbox" :checked="u.is_admin" @change="patchUser(u.id, {is_admin: $event.target.checked})"></td>
+            <td><input type="checkbox" :checked="u.is_active" @change="patchUser(u.id, {is_active: $event.target.checked})"></td>
+            <td x-text="formatDate(u.created_at)"></td>
+            <td>
+              <button @click="resetPassword(u)" class="ghost">PW zurücksetzen</button>
+              <button @click="deleteUser(u.id)" class="danger" x-show="u.id !== me.id">Löschen</button>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </section>
+</div>
+</template>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

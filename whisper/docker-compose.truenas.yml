@@ -1,0 +1,40 @@
+# TrueNAS Custom App: Speaches (OpenAI-kompatibler Whisper-Server, CPU)
+#
+# Datasets vorher anlegen (TrueNAS UI):
+#   HDDs/Applications/speaches/cache         (Modelle, ~3-6 GB pro Modell)
+#   HDDs/Applications/speaches/config        (optionale Config-Dateien)
+#   Owner/Group: apps:apps (UID/GID 568) per ACL-Preset "Apps"
+#
+# Hardware-Profil: AMD Ryzen 5 3600 (6C/12T), 32 GB RAM, mind. 8 GB frei.
+# Reserviert: 8 GB RAM, max 6 Threads für Whisper.
+
+services:
+  speaches:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    container_name: speaches
+    restart: unless-stopped
+    # Speaches-Image läuft fest als UID 1000 (ubuntu), eigene Python-Installation
+    # ist nur für 1000 lesbar. Datasets müssen daher mit 1000:1000 geownt sein.
+    ports:
+      - "8001:8000"
+    volumes:
+      - /mnt/HDDs/Applications/speaches/cache:/home/ubuntu/.cache/huggingface
+      - /mnt/HDDs/Applications/speaches/config:/config
+    environment:
+      # Standardmodell, das beim ersten Request geladen und im Speicher gehalten wird.
+      # Für deine CPU ist 'medium' der gute Kompromiss; 'small' ~2x schneller.
+      WHISPER__MODEL: Systran/faster-whisper-medium
+      WHISPER__COMPUTE_TYPE: int8
+      WHISPER__INFERENCE_DEVICE: cpu
+      WHISPER__CPU_THREADS: "6"
+      WHISPER__NUM_WORKERS: "1"
+      ENABLE_UI: "true"
+      LOG_LEVEL: info
+      # Optional: API-Key-Schutz aktivieren (sonst offen für jeden im LAN)
+      # API_KEY: ein-langes-zufallsgeheimnis
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G

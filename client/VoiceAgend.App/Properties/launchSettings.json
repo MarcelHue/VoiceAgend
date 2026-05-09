@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "VoiceAgend.App (Unpackaged)": {
+      "commandName": "Project",
+      "nativeDebugging": false
+    }
+  }
+}

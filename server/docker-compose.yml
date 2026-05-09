@@ -1,0 +1,29 @@
+services:
+  voiceagend:
+    build: .
+    image: voiceagend-server:latest
+    container_name: voiceagend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+      - whisper-cache:/root/.cache/huggingface
+    environment:
+      VOICEAGEND_MODEL_SIZE: large-v3
+      VOICEAGEND_DEVICE: cuda
+      VOICEAGEND_COMPUTE_TYPE: float16
+      VOICEAGEND_DEFAULT_LANGUAGE: de
+      VOICEAGEND_JWT_SECRET: ${VOICEAGEND_JWT_SECRET:-change-me-please}
+      VOICEAGEND_ADMIN_USER: ${VOICEAGEND_ADMIN_USER:-admin}
+      VOICEAGEND_ADMIN_PASSWORD: ${VOICEAGEND_ADMIN_PASSWORD:-admin}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  whisper-cache:
