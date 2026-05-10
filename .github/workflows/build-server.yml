@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'server/**'
+      - '!server/**/*.md'
+      - '!server/**/LICENSE'
       - '.github/workflows/build-server.yml'
   workflow_dispatch:
 

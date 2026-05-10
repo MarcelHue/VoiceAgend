@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'client/**'
+      - '!client/**/*.md'
+      - '!client/**/README*'
+      - '!client/**/LICENSE'
       - '.github/workflows/build-app.yml'
   workflow_dispatch:
 
