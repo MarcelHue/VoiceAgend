@@ -25,8 +25,8 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = "VoiceAgend";
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 1440));
+        App.Current.Loc.LanguageChanged += () => DispatcherQueue.TryEnqueue(ApplyLocalization);
         try { AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico")); }
         catch (Exception ex) { Logger.Warn("SetIcon: " + ex.Message); }
         Activated += (_, _) =>
@@ -61,6 +61,8 @@ public sealed partial class MainWindow : Window
 
     private void LoadIntoUi()
     {
+        ApplyLocalization();
+
         // Initial: Home-View aktiv
         if (Nav.SelectedItem == null)
             Nav.SelectedItem = Nav.MenuItems[0];
@@ -127,9 +129,7 @@ public sealed partial class MainWindow : Window
     {
         var enable = AutoStartCheck.IsChecked == true;
         App.Current.AutoStart.SetEnabled(enable);
-        StatusText.Text = enable
-            ? "Auto-Start aktiviert."
-            : "Auto-Start deaktiviert.";
+        StatusText.Text = App.Current.Loc.T(enable ? "Settings.AutoStart.Enabled" : "Settings.AutoStart.Disabled");
     }
 
     private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -144,7 +144,7 @@ public sealed partial class MainWindow : Window
 
     private void OnTempChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
-        ServerTempLabel.Text = $"Temperature: {ServerTempSlider.Value:F2}";
+        ServerTempLabel.Text = string.Format(App.Current.Loc.T("Profile.TempFmt"), ServerTempSlider.Value);
     }
 
     private async void OnProfileLoad(object sender, RoutedEventArgs e) => await LoadProfileAsync(force: true);
@@ -174,7 +174,8 @@ public sealed partial class MainWindow : Window
 
             // Profil
             var p = await App.Current.ServerApi.GetProfileAsync(baseUrl, s.ApiKey);
-            ProfileApiKeyLabel.Text = $"API-Key: {p.ApiKeyName} (#{p.ApiKeyId})";
+            ProfileApiKeyLabel.Text = string.Format(
+                App.Current.Loc.T("Profile.ApiKeyFmt"), p.ApiKeyName, p.ApiKeyId);
 
             if (string.IsNullOrEmpty(p.Model))
                 ServerModelCombo.SelectedIndex = 0;
@@ -185,16 +186,16 @@ public sealed partial class MainWindow : Window
             }
             ServerPromptBox.Text = p.Prompt ?? "";
             ServerTempSlider.Value = p.Temperature;
-            ServerTempLabel.Text = $"Temperature: {p.Temperature:F2}";
+            ServerTempLabel.Text = string.Format(App.Current.Loc.T("Profile.TempFmt"), p.Temperature);
 
             BuildCatalogList();
 
-            ProfileStatus.Text = $"Geladen ({models.Count} Modelle installiert).";
+            ProfileStatus.Text = $"{models.Count} ✓";
         }
         catch (Exception ex)
         {
             Logger.Error("Profile load", ex);
-            ProfileStatus.Text = $"Fehler: {ex.Message}";
+            ProfileStatus.Text = string.Format(App.Current.Loc.T("Status.ErrorFmt"), ex.Message);
         }
     }
 
@@ -209,6 +210,7 @@ public sealed partial class MainWindow : Window
 
     private FrameworkElement BuildCatalogRow(ModelCatalog.Entry entry)
     {
+        var L = App.Current.Loc;
         var installed = _installedModels.Contains(entry.Id);
 
         var grid = new Grid { Margin = new Thickness(0, 6, 0, 6), ColumnSpacing = 12 };
@@ -240,14 +242,14 @@ public sealed partial class MainWindow : Window
         {
             actionPanel.Children.Add(new TextBlock
             {
-                Text = "✓ Installiert", VerticalAlignment = VerticalAlignment.Center,
+                Text = L.T("Models.Installed"), VerticalAlignment = VerticalAlignment.Center,
                 Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.SeaGreen),
             });
         }
         else
         {
             var progress = new ProgressRing { IsActive = false, Width = 18, Height = 18 };
-            var btn = new Button { Content = "Installieren" };
+            var btn = new Button { Content = L.T("Models.Btn.Install") };
             btn.Click += async (_, _) => await InstallModelAsync(entry, btn, progress);
             actionPanel.Children.Add(progress);
             actionPanel.Children.Add(btn);
@@ -264,8 +266,9 @@ public sealed partial class MainWindow : Window
         var s = App.Current.Settings;
         if (string.IsNullOrWhiteSpace(s.ApiKey)) return;
 
+        var L = App.Current.Loc;
         btn.IsEnabled = false;
-        btn.Content = "Wird geladen…";
+        btn.Content = L.T("Models.Btn.Loading");
         progress.IsActive = true;
 
         // Polling-Task: prüft alle 5 s, ob das Modell schon in der lokalen Liste auftaucht.
@@ -285,7 +288,7 @@ public sealed partial class MainWindow : Window
                 }
                 catch { /* ignorieren, wir versuchen's weiter */ }
                 var elapsed = (int)(DateTime.Now - startedAt).TotalSeconds;
-                DispatcherQueue.TryEnqueue(() => btn.Content = $"Lädt… ({elapsed}s)");
+                DispatcherQueue.TryEnqueue(() => btn.Content = string.Format(L.T("Models.Btn.LoadingFmt"), elapsed));
                 try { await Task.Delay(TimeSpan.FromSeconds(5), cts.Token); } catch { }
             }
         });
@@ -296,7 +299,7 @@ public sealed partial class MainWindow : Window
             await App.Current.ServerApi.InstallModelAsync(baseUrl, s.ApiKey, entry.Id);
             cts.Cancel();
             progress.IsActive = false;
-            btn.Content = "✓ Fertig";
+            btn.Content = L.T("Models.Btn.Done");
             await Task.Delay(800);
             await LoadProfileAsync(force: true); // Liste neu aufbauen
         }
@@ -306,8 +309,8 @@ public sealed partial class MainWindow : Window
             Logger.Error("Model install", ex);
             progress.IsActive = false;
             btn.IsEnabled = true;
-            btn.Content = "Erneut versuchen";
-            ProfileStatus.Text = $"Install-Fehler: {ex.Message}";
+            btn.Content = L.T("Models.Btn.Retry");
+            ProfileStatus.Text = string.Format(L.T("Models.ErrorFmt"), ex.Message);
         }
     }
 
@@ -328,31 +331,32 @@ public sealed partial class MainWindow : Window
             var prompt = ServerPromptBox.Text;
             var temp = ServerTempSlider.Value;
             await App.Current.ServerApi.UpdateProfileAsync(baseUrl, s.ApiKey, model ?? "", prompt, temp);
-            ProfileStatus.Text = $"Gespeichert ({DateTime.Now:HH:mm:ss}).";
+            ProfileStatus.Text = string.Format(App.Current.Loc.T("Status.SavedFmt"), DateTime.Now);
         }
         catch (Exception ex)
         {
             Logger.Error("Profile save", ex);
-            ProfileStatus.Text = $"Fehler: {ex.Message}";
+            ProfileStatus.Text = string.Format(App.Current.Loc.T("Status.ErrorFmt"), ex.Message);
         }
     }
 
     private void OnCopyTranscript(object sender, RoutedEventArgs e)
     {
         var text = TranscriptBox.Text;
+        var L = App.Current.Loc;
         if (string.IsNullOrEmpty(text))
         {
-            HomeStatus.Text = "Kein Text zum Kopieren.";
+            HomeStatus.Text = L.T("Home.Status.Empty");
             return;
         }
         App.Current.Output.CopyToClipboard(text);
-        HomeStatus.Text = $"Kopiert ({text.Length} Zeichen).";
+        HomeStatus.Text = string.Format(L.T("Home.Status.CopiedFmt"), text.Length);
     }
 
     private void OnClearTranscript(object sender, RoutedEventArgs e)
     {
         TranscriptBox.Text = "";
-        HomeStatus.Text = "Geleert.";
+        HomeStatus.Text = App.Current.Loc.T("Home.Status.Cleared");
     }
 
     private void AutoSave()
@@ -388,7 +392,7 @@ public sealed partial class MainWindow : Window
 
         App.Current.SaveSettings();
         App.Current.Hud?.ApplyPosition();
-        StatusText.Text = $"Gespeichert ({DateTime.Now:HH:mm:ss}).";
+        StatusText.Text = string.Format(App.Current.Loc.T("Status.SavedFmt"), DateTime.Now);
     }
 
     private void OnFieldLostFocus(object sender, RoutedEventArgs e) => AutoSave();
@@ -429,7 +433,7 @@ public sealed partial class MainWindow : Window
 
     private void OnVolumeChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
-        VolumeLabel.Text = $"Lautstärke: {(int)VolumeSlider.Value}%";
+        VolumeLabel.Text = string.Format(App.Current.Loc.T("Settings.VolumeFmt"), (int)VolumeSlider.Value);
         AutoSave();
     }
 
@@ -448,7 +452,7 @@ public sealed partial class MainWindow : Window
     private void OnHotkeyRecord(object sender, RoutedEventArgs e)
     {
         _recordingHotkey = true;
-        HotkeyButton.Content = "Drücke jetzt eine Taste…";
+        HotkeyButton.Content = App.Current.Loc.T("Settings.Hotkey.Recording");
         if (Content is FrameworkElement fe) fe.Focus(FocusState.Programmatic);
     }
 
@@ -475,7 +479,7 @@ public sealed partial class MainWindow : Window
         s.HotkeyModifiers = mods;
         s.HotkeyVirtualKey = (uint)key;
         HotkeyDisplay.Text = s.HotkeyDisplay();
-        HotkeyButton.Content = "Hotkey aufzeichnen…";
+        HotkeyButton.Content = App.Current.Loc.T("Settings.Hotkey.Record");
         _recordingHotkey = false;
         AutoSave();
     }
@@ -533,7 +537,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             Logger.Error("Health check failed", ex);
-            StatusText.Text = $"Server-Test Fehler: {ex.GetType().Name}: {ex.Message}";
+            StatusText.Text = string.Format(App.Current.Loc.T("Status.ErrorFmt"), $"{ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -558,6 +562,146 @@ public sealed partial class MainWindow : Window
 
     private async void OnTrayToggle(object sender, RoutedEventArgs e)
         => await App.Current.Coordinator.ToggleAsync();
+
+    private void OnUiLanguageChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (UiLanguageCombo.SelectedItem is not ComboBoxItem item) return;
+        var code = (string)item.Tag;
+        if (App.Current.Settings.UiLanguage == code) return;
+        App.Current.Settings.UiLanguage = code;
+        App.Current.SaveSettings();
+        App.Current.Loc.Load(code); // löst LanguageChanged → ApplyLocalization
+    }
+
+    private void ApplyLocalization()
+    {
+        var L = App.Current.Loc;
+        Title = L.T("Window.Title");
+
+        // NavView
+        ((NavigationViewItem)Nav.MenuItems[0]).Content = L.T("Nav.Transcript");
+        ((NavigationViewItem)Nav.MenuItems[1]).Content = L.T("Nav.Profile");
+        ((NavigationViewItem)Nav.MenuItems[2]).Content = L.T("Nav.Settings");
+
+        // Tray
+        try
+        {
+            TrayIcon.ToolTipText = App.Current.Coordinator.IsRecording
+                ? L.T("Tray.TooltipRecording") : L.T("Tray.Tooltip");
+            TrayToggleItem.Text = L.T("Tray.Toggle");
+            TrayShowItem.Text = L.T("Tray.ShowWindow");
+            TrayQuitItem.Text = L.T("Tray.Quit");
+        }
+        catch { }
+
+        // ----- Home -----
+        HomeTitle.Text = L.T("Home.Title");
+        TranscriptBox.PlaceholderText = L.T("Home.Placeholder");
+        BtnCopyTranscript.Content = L.T("Home.Btn.Copy");
+        BtnClearTranscript.Content = L.T("Home.Btn.Clear");
+        BtnHomeToggle.Content = L.T("Home.Btn.Toggle");
+
+        // ----- Profile -----
+        ProfileTitle.Text = L.T("Profile.Title");
+        ProfileDescription.Text = L.T("Profile.Description");
+        ProfileLoadButton.Content = L.T("Profile.Btn.Reload");
+        ProfileSaveButton.Content = L.T("Profile.Btn.Save");
+        ProfileModelLabel.Text = L.T("Profile.Model");
+        ProfilePromptLabel.Text = L.T("Profile.Prompt");
+        ServerPromptBox.PlaceholderText = L.T("Profile.Prompt.Placeholder");
+        ProfileTempHint.Text = L.T("Profile.TempHint");
+        ServerTempLabel.Text = string.Format(L.T("Profile.TempFmt"), ServerTempSlider.Value);
+        ModelsTitle.Text = L.T("Models.Title");
+        ModelsDescription.Text = L.T("Models.Description");
+
+        // ----- Settings -----
+        SettingsTitle.Text = L.T("Settings.Title");
+        ServerUrlLabel.Text = L.T("Settings.ServerUrl");
+        ServerUrlBox.PlaceholderText = "wss://va.example.com/ws/transcribe";
+        ApiKeyLabel.Text = L.T("Settings.ApiKey");
+        LanguageLabel.Text = L.T("Settings.Language");
+        if (LanguageCombo.Items.Count >= 3)
+        {
+            ((ComboBoxItem)LanguageCombo.Items[0]).Content = L.T("Settings.Lang.Auto");
+            ((ComboBoxItem)LanguageCombo.Items[1]).Content = L.T("Settings.Lang.De");
+            ((ComboBoxItem)LanguageCombo.Items[2]).Content = L.T("Settings.Lang.En");
+        }
+        MicLabel.Text = L.T("Settings.Mic");
+        HotkeyLabel.Text = L.T("Settings.Hotkey");
+        HotkeyButton.Content = L.T("Settings.Hotkey.Record");
+        OutputModeLabel.Text = L.T("Settings.OutputMode");
+        if (OutputModeCombo.Items.Count >= 3)
+        {
+            ((ComboBoxItem)OutputModeCombo.Items[0]).Content = L.T("OutputMode.Clipboard");
+            ((ComboBoxItem)OutputModeCombo.Items[1]).Content = L.T("OutputMode.Type");
+            ((ComboBoxItem)OutputModeCombo.Items[2]).Content = L.T("Settings.OutputMode.Notification");
+        }
+        ToastCheck.Content = L.T("Settings.ToastOnResult");
+
+        // ----- Sounds -----
+        SoundsTitle.Text = L.T("Settings.Sounds");
+        SoundOnStartLabel.Text = L.T("Settings.Sound.OnStart");
+        SoundOnStopLabel.Text = L.T("Settings.Sound.OnStop");
+        SoundOnDoneLabel.Text = L.T("Settings.Sound.OnDone");
+        SoundOnErrorLabel.Text = L.T("Settings.Sound.OnError");
+        SoundStartPreview.Content = L.T("Settings.Sound.Preview");
+        SoundStopPreview.Content = L.T("Settings.Sound.Preview");
+        SoundDonePreview.Content = L.T("Settings.Sound.Preview");
+        SoundErrorPreview.Content = L.T("Settings.Sound.Preview");
+        VolumeLabel.Text = string.Format(L.T("Settings.VolumeFmt"), (int)VolumeSlider.Value);
+
+        // Sound-Combos: Display-Strings für SoundChoice neu setzen
+        RefreshSoundCombo(SoundStartCombo);
+        RefreshSoundCombo(SoundStopCombo);
+        RefreshSoundCombo(SoundDoneCombo);
+        RefreshSoundCombo(SoundErrorCombo);
+
+        // ----- UI-Sprache-Picker -----
+        if (UiLanguageCombo.Items.Count == 0)
+        {
+            foreach (var (code, display) in LocalizationService.AvailableLanguages)
+                UiLanguageCombo.Items.Add(new ComboBoxItem { Content = display, Tag = code });
+        }
+        foreach (ComboBoxItem ci in UiLanguageCombo.Items)
+        {
+            if ((string)ci.Tag == App.Current.Settings.UiLanguage) { UiLanguageCombo.SelectedItem = ci; break; }
+        }
+        UiLanguageLabel.Text = L.T("Settings.UiLanguage");
+
+        AutoStartCheck.Content = L.T("Settings.AutoStart");
+        HudEnabledCheck.Content = L.T("Settings.HudShow");
+        HudPreviewButton.Content = L.T("Settings.HudPreview");
+
+        // HUD-Positions
+        if (HudPositionCombo.Items.Count >= 9)
+        {
+            var keys = new[] { "Hud.TopLeft", "Hud.TopCenter", "Hud.TopRight",
+                "Hud.MiddleLeft", "Hud.MiddleCenter", "Hud.MiddleRight",
+                "Hud.BottomLeft", "Hud.BottomCenter", "Hud.BottomRight" };
+            for (var i = 0; i < keys.Length; i++)
+                ((ComboBoxItem)HudPositionCombo.Items[i]).Content = L.T(keys[i]);
+        }
+
+        // Footer-Buttons
+        BtnMinimize.Content = L.T("Btn.Minimize");
+        BtnOpenLog.Content = L.T("Btn.OpenLog");
+        BtnTestServer.Content = L.T("Btn.TestServer");
+        BtnCheckUpdates.Content = L.T("Btn.CheckUpdates");
+        ApplyUpdateButton.Content = L.T("Btn.InstallUpdate");
+
+        // Modell-Katalog neu rendern (Sprache der Buttons)
+        if (ModelCatalogList?.Items.Count > 0) BuildCatalogList();
+    }
+
+    private static void RefreshSoundCombo(ComboBox combo)
+    {
+        // Display-Texte aktualisieren, ohne Auswahl zu verlieren
+        foreach (var raw in combo.Items)
+        {
+            if (raw is ComboBoxItem item && item.Tag is SoundChoice sc)
+                item.Content = SoundService.Display(sc);
+        }
+    }
 
     private void OnTrayShow(object sender, RoutedEventArgs e) => Activate();
 
@@ -586,7 +730,9 @@ public sealed partial class MainWindow : Window
     {
         var iconPath = App.Current.Coordinator.IsRecording ? "Assets/TrayRecording.ico" : "Assets/TrayIdle.ico";
         TrayIcon.IconSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri($"ms-appx:///{iconPath}"));
-        TrayIcon.ToolTipText = App.Current.Coordinator.IsRecording ? "VoiceAgend (Aufnahme)" : "VoiceAgend";
+        TrayIcon.ToolTipText = App.Current.Coordinator.IsRecording
+            ? App.Current.Loc.T("Tray.TooltipRecording")
+            : App.Current.Loc.T("Tray.Tooltip");
     }
 
     private sealed record MicEntry(int Number, string Name)

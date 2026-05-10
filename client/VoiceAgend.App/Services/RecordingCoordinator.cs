@@ -20,6 +20,8 @@ public sealed class RecordingCoordinator
 
     public string LastTranscript { get; private set; } = "";
 
+    private static LocalizationService Loc() => App.Current.Loc;
+
     public bool IsRecording => _audio.IsRecording;
     public bool IsBusy { get; private set; }
 
@@ -50,14 +52,14 @@ public sealed class RecordingCoordinator
                 Logger.Info($"Start recording, device={s.MicDeviceNumber}");
                 _audio.Start(s.MicDeviceNumber);
                 _sound.Play(s.SoundOnStart, s.SoundVolume);
-                StatusChanged?.Invoke("Aufnahme läuft…");
+                StatusChanged?.Invoke(Loc().T("Status.Recording"));
                 StateChanged?.Invoke();
             }
             catch (Exception ex)
             {
                 Logger.Error("Mic start failed", ex);
                 _sound.Play(s.SoundOnError, s.SoundVolume);
-                StatusChanged?.Invoke($"Mic-Fehler: {ex.GetType().Name}: {ex.Message}");
+                StatusChanged?.Invoke(string.Format(Loc().T("Status.MicErrorFmt"), $"{ex.GetType().Name}: {ex.Message}"));
             }
             return;
         }
@@ -73,11 +75,11 @@ public sealed class RecordingCoordinator
 
             if (audio.Length < 1024)
             {
-                StatusChanged?.Invoke("Zu kurz, verworfen.");
+                StatusChanged?.Invoke(Loc().T("Status.TooShort"));
                 return;
             }
 
-            StatusChanged?.Invoke("Sende…");
+            StatusChanged?.Invoke(Loc().T("Status.Sending"));
             var result = await _client.TranscribeAsync(
                 s.ServerUrl, s.ApiKey,
                 string.IsNullOrWhiteSpace(s.Language) ? null : s.Language,
@@ -86,7 +88,7 @@ public sealed class RecordingCoordinator
 
             if (string.IsNullOrWhiteSpace(result.Text))
             {
-                StatusChanged?.Invoke("Leeres Transkript.");
+                StatusChanged?.Invoke(Loc().T("Status.EmptyTranscript"));
                 return;
             }
 
@@ -94,14 +96,14 @@ public sealed class RecordingCoordinator
             TranscriptReceived?.Invoke(result.Text);
             _output.Dispatch(s.OutputMode, result.Text, s.ShowToastOnResult);
             _sound.Play(s.SoundOnDone, s.SoundVolume);
-            StatusChanged?.Invoke($"Fertig ({result.ProcessingMs} ms).");
+            StatusChanged?.Invoke(string.Format(Loc().T("Status.DoneFmt"), result.ProcessingMs));
         }
         catch (Exception ex)
         {
             Logger.Error("Transcription failed", ex);
             var msg = string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message;
             _sound.Play(s.SoundOnError, s.SoundVolume);
-            StatusChanged?.Invoke($"Fehler: {ex.GetType().Name}: {msg}");
+            StatusChanged?.Invoke(string.Format(Loc().T("Status.ErrorFmt"), $"{ex.GetType().Name}: {msg}"));
         }
         finally
         {

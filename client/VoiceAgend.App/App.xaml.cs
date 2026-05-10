@@ -18,6 +18,7 @@ public partial class App : Application
     public HotkeyManager Hotkey { get; } = new();
     public UpdateService Updates { get; } = new();
     public AutoStartService AutoStart { get; } = new();
+    public LocalizationService Loc { get; } = new();
     public RecordingCoordinator Coordinator { get; private set; } = null!;
 
     public MainWindow? MainWindow { get; private set; }
@@ -40,6 +41,7 @@ public partial class App : Application
         };
 
         Settings = SettingsStore.Load();
+        Loc.Load(Settings.UiLanguage);
         Coordinator = new RecordingCoordinator(Audio, Client, Output, Sounds, () => Settings);
 
         MainWindow = new MainWindow();

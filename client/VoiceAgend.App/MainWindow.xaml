@@ -15,13 +15,10 @@
             NoLeftClickDelay="True">
             <tray:TaskbarIcon.ContextFlyout>
                 <MenuFlyout>
-                    <MenuFlyoutItem Text="Aufnahme starten / stoppen"
-                                    Command="{x:Bind ToggleCommand}" />
+                    <MenuFlyoutItem x:Name="TrayToggleItem" Command="{x:Bind ToggleCommand}" />
                     <MenuFlyoutSeparator />
-                    <MenuFlyoutItem Text="Fenster zeigen"
-                                    Command="{x:Bind ShowWindowCommand}" />
-                    <MenuFlyoutItem Text="Beenden"
-                                    Command="{x:Bind QuitCommand}" />
+                    <MenuFlyoutItem x:Name="TrayShowItem" Command="{x:Bind ShowWindowCommand}" />
+                    <MenuFlyoutItem x:Name="TrayQuitItem" Command="{x:Bind QuitCommand}" />
                 </MenuFlyout>
             </tray:TaskbarIcon.ContextFlyout>
         </tray:TaskbarIcon>
@@ -35,9 +32,9 @@
             OpenPaneLength="200"
             IsPaneToggleButtonVisible="True">
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="Transkript" Tag="home" Icon="Document" />
-                <NavigationViewItem Content="Server-Profil" Tag="profile" Icon="Globe" />
-                <NavigationViewItem Content="Einstellungen" Tag="settings" Icon="Setting" />
+                <NavigationViewItem Tag="home" Icon="Document" />
+                <NavigationViewItem Tag="profile" Icon="Globe" />
+                <NavigationViewItem Tag="settings" Icon="Setting" />
             </NavigationView.MenuItems>
 
             <Grid>
@@ -50,7 +47,7 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Text="Letztes Transkript" Style="{StaticResource TitleTextBlockStyle}" />
+                    <TextBlock Grid.Row="0" x:Name="HomeTitle" Style="{StaticResource TitleTextBlockStyle}" />
 
                     <TextBlock Grid.Row="1" x:Name="HomeStatus"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -63,13 +60,13 @@
                              IsReadOnly="False"
                              VerticalContentAlignment="Top"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
-                             FontSize="14"
-                             PlaceholderText="Hier erscheint das letzte Transkript. Du kannst es markieren, kopieren oder bearbeiten." />
+                             FontSize="14" />
 
                     <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10">
-                        <Button Content="Kopieren" Click="OnCopyTranscript" Style="{StaticResource AccentButtonStyle}" />
-                        <Button Content="Leeren" Click="OnClearTranscript" />
-                        <Button Content="Aufnahme starten/stoppen" Click="OnTrayToggle" />
+                        <Button x:Name="BtnCopyTranscript" Click="OnCopyTranscript"
+                                Style="{StaticResource AccentButtonStyle}" />
+                        <Button x:Name="BtnClearTranscript" Click="OnClearTranscript" />
+                        <Button x:Name="BtnHomeToggle" Click="OnTrayToggle" />
                     </StackPanel>
                 </Grid>
 
@@ -89,42 +86,39 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="0" Text="Server-Profil"
+                        <TextBlock Grid.Row="0" x:Name="ProfileTitle"
                                    Style="{StaticResource TitleTextBlockStyle}" />
 
-                        <TextBlock Grid.Row="1"
-                                   Text="Diese Einstellungen werden pro API-Key auf dem Server gespeichert und bei jeder Transkription verwendet."
+                        <TextBlock Grid.Row="1" x:Name="ProfileDescription"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap" />
 
                         <StackPanel Grid.Row="2" Spacing="6" Orientation="Horizontal">
-                            <Button x:Name="ProfileLoadButton" Content="Vom Server laden" Click="OnProfileLoad" />
-                            <Button x:Name="ProfileSaveButton" Content="Speichern" Click="OnProfileSave"
+                            <Button x:Name="ProfileLoadButton" Click="OnProfileLoad" />
+                            <Button x:Name="ProfileSaveButton" Click="OnProfileSave"
                                     Style="{StaticResource AccentButtonStyle}" />
                             <TextBlock x:Name="ProfileStatus" VerticalAlignment="Center"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
 
                         <StackPanel Grid.Row="3" Spacing="6">
-                            <TextBlock Text="Modell" />
+                            <TextBlock x:Name="ProfileModelLabel" />
                             <ComboBox x:Name="ServerModelCombo" Width="500" HorizontalAlignment="Left" />
                         </StackPanel>
 
                         <StackPanel Grid.Row="4" Spacing="6">
-                            <TextBlock Text="Initial-Prompt (biased Vokabular, Eigennamen, Stil)" />
+                            <TextBlock x:Name="ProfilePromptLabel" />
                             <TextBox x:Name="ServerPromptBox"
-                                     PlaceholderText="z. B. 'Marcel, VoiceAgend, TrueNAS, Speaches.'"
                                      AcceptsReturn="True" TextWrapping="Wrap" Height="80" />
                         </StackPanel>
 
                         <StackPanel Grid.Row="5" Spacing="6">
-                            <TextBlock x:Name="ServerTempLabel" Text="Temperature: 0.00" />
+                            <TextBlock x:Name="ServerTempLabel" />
                             <Slider x:Name="ServerTempSlider" Minimum="0" Maximum="1" StepFrequency="0.05"
                                     Width="320" HorizontalAlignment="Left"
                                     ValueChanged="OnTempChanged" />
-                            <TextBlock TextWrapping="Wrap"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       Text="0.0 = deterministisch (empfohlen für Diktat). Höhere Werte = freier formuliert, mehr Varianz." />
+                            <TextBlock x:Name="ProfileTempHint" TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
 
                         <TextBlock Grid.Row="6" x:Name="ProfileApiKeyLabel"
@@ -132,14 +126,10 @@
                                    FontStyle="Italic" />
 
                         <StackPanel Grid.Row="7" Spacing="10" Margin="0,16,0,0">
-                            <TextBlock Text="Modelle installieren" Style="{StaticResource SubtitleTextBlockStyle}" />
-                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"
-                                       Text="Lädt das gewählte Modell auf dem Server in den Whisper-Cache. Größere Modelle brauchen mehrere Minuten." />
-                            <ItemsControl x:Name="ModelCatalogList">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate />
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <TextBlock x:Name="ModelsTitle" Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock x:Name="ModelsDescription"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                            <ItemsControl x:Name="ModelCatalogList" />
                         </StackPanel>
                     </Grid>
                 </ScrollViewer>
@@ -162,61 +152,61 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="0" Text="Einstellungen" Style="{StaticResource TitleTextBlockStyle}" />
+                        <TextBlock Grid.Row="0" x:Name="SettingsTitle"
+                                   Style="{StaticResource TitleTextBlockStyle}" />
 
                         <StackPanel Grid.Row="1" Spacing="6">
-                            <TextBlock Text="Server-URL" />
-                            <TextBox x:Name="ServerUrlBox" PlaceholderText="wss://va.example.com/ws/transcribe"
-                                     LostFocus="OnFieldLostFocus" />
+                            <TextBlock x:Name="ServerUrlLabel" />
+                            <TextBox x:Name="ServerUrlBox" LostFocus="OnFieldLostFocus" />
                         </StackPanel>
 
                         <StackPanel Grid.Row="2" Spacing="6">
-                            <TextBlock Text="API-Key" />
+                            <TextBlock x:Name="ApiKeyLabel" />
                             <PasswordBox x:Name="ApiKeyBox" LostFocus="OnFieldLostFocus" />
                         </StackPanel>
 
                         <StackPanel Grid.Row="3" Spacing="6">
-                            <TextBlock Text="Sprache" />
+                            <TextBlock x:Name="LanguageLabel" />
                             <ComboBox x:Name="LanguageCombo" Width="220" HorizontalAlignment="Left"
                                       SelectionChanged="OnFieldChanged">
-                                <ComboBoxItem Content="Auto-erkennen" Tag="" />
-                                <ComboBoxItem Content="Deutsch" Tag="de" />
-                                <ComboBoxItem Content="Englisch" Tag="en" />
+                                <ComboBoxItem Tag="" />
+                                <ComboBoxItem Tag="de" />
+                                <ComboBoxItem Tag="en" />
                             </ComboBox>
                         </StackPanel>
 
                         <StackPanel Grid.Row="4" Spacing="6">
-                            <TextBlock Text="Mikrofon" />
+                            <TextBlock x:Name="MicLabel" />
                             <ComboBox x:Name="MicCombo" Width="500" HorizontalAlignment="Left"
                                       SelectionChanged="OnFieldChanged" />
                         </StackPanel>
 
                         <StackPanel Grid.Row="5" Spacing="6">
-                            <TextBlock Text="Hotkey (Toggle: erst starten, dann stoppen)" />
+                            <TextBlock x:Name="HotkeyLabel" />
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button x:Name="HotkeyButton" Content="Hotkey aufzeichnen…" Click="OnHotkeyRecord" />
+                                <Button x:Name="HotkeyButton" Click="OnHotkeyRecord" />
                                 <TextBlock x:Name="HotkeyDisplay" VerticalAlignment="Center"
                                            Style="{StaticResource BodyStrongTextBlockStyle}" />
                             </StackPanel>
                         </StackPanel>
 
                         <StackPanel Grid.Row="6" Spacing="6">
-                            <TextBlock Text="Ausgabe-Modus" />
-                            <ComboBox x:Name="OutputModeCombo" Width="240" HorizontalAlignment="Left"
+                            <TextBlock x:Name="OutputModeLabel" />
+                            <ComboBox x:Name="OutputModeCombo" Width="320" HorizontalAlignment="Left"
                                       SelectionChanged="OnFieldChanged">
-                                <ComboBoxItem Content="Zwischenablage" Tag="Clipboard" />
-                                <ComboBoxItem Content="Direkt tippen (in aktives Fenster)" Tag="Type" />
-                                <ComboBoxItem Content="Nur Benachrichtigung" Tag="Notification" />
+                                <ComboBoxItem Tag="Clipboard" />
+                                <ComboBoxItem Tag="Type" />
+                                <ComboBoxItem Tag="Notification" />
                             </ComboBox>
                         </StackPanel>
 
                         <StackPanel Grid.Row="7" Spacing="10">
-                            <CheckBox x:Name="ToastCheck" Content="Toast bei Ergebnis" Click="OnFieldChanged" />
+                            <CheckBox x:Name="ToastCheck" Click="OnFieldChanged" />
 
-                            <TextBlock Text="Sounds" Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock x:Name="SoundsTitle" Style="{StaticResource SubtitleTextBlockStyle}" />
                             <Grid ColumnSpacing="12" RowSpacing="6">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="200" />
+                                    <ColumnDefinition Width="220" />
                                     <ColumnDefinition Width="220" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
@@ -227,55 +217,56 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Aufnahme startet" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="0" Grid.Column="0" x:Name="SoundOnStartLabel" VerticalAlignment="Center" />
                                 <ComboBox Grid.Row="0" Grid.Column="1" x:Name="SoundStartCombo" HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
-                                <Button Grid.Row="0" Grid.Column="2" Content="Probehören" Click="OnPlayStart" />
+                                <Button Grid.Row="0" Grid.Column="2" x:Name="SoundStartPreview" Click="OnPlayStart" />
 
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Aufnahme stoppt" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="1" Grid.Column="0" x:Name="SoundOnStopLabel" VerticalAlignment="Center" />
                                 <ComboBox Grid.Row="1" Grid.Column="1" x:Name="SoundStopCombo" HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
-                                <Button Grid.Row="1" Grid.Column="2" Content="Probehören" Click="OnPlayStop" />
+                                <Button Grid.Row="1" Grid.Column="2" x:Name="SoundStopPreview" Click="OnPlayStop" />
 
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Transkript fertig" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="2" Grid.Column="0" x:Name="SoundOnDoneLabel" VerticalAlignment="Center" />
                                 <ComboBox Grid.Row="2" Grid.Column="1" x:Name="SoundDoneCombo" HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
-                                <Button Grid.Row="2" Grid.Column="2" Content="Probehören" Click="OnPlayDone" />
+                                <Button Grid.Row="2" Grid.Column="2" x:Name="SoundDonePreview" Click="OnPlayDone" />
 
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Fehler" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="3" Grid.Column="0" x:Name="SoundOnErrorLabel" VerticalAlignment="Center" />
                                 <ComboBox Grid.Row="3" Grid.Column="1" x:Name="SoundErrorCombo" HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
-                                <Button Grid.Row="3" Grid.Column="2" Content="Probehören" Click="OnPlayError" />
+                                <Button Grid.Row="3" Grid.Column="2" x:Name="SoundErrorPreview" Click="OnPlayError" />
                             </Grid>
 
                             <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock x:Name="VolumeLabel" Text="Lautstärke: 70%" VerticalAlignment="Center" Width="160" />
+                                <TextBlock x:Name="VolumeLabel" VerticalAlignment="Center" Width="200" />
                                 <Slider x:Name="VolumeSlider" Width="240" Minimum="0" Maximum="100"
                                         StepFrequency="5" ValueChanged="OnVolumeChanged" />
                             </StackPanel>
                         </StackPanel>
 
                         <StackPanel Grid.Row="8" Spacing="6" Orientation="Horizontal">
-                            <CheckBox x:Name="AutoStartCheck" Content="Mit Windows starten"
-                                      Click="OnAutoStartToggle" />
-                            <CheckBox x:Name="HudEnabledCheck" Content="HUD anzeigen" Click="OnFieldChanged" />
-                            <ComboBox x:Name="HudPositionCombo" Width="180" SelectionChanged="OnFieldChanged">
-                                <ComboBoxItem Content="Oben links" Tag="TopLeft" />
-                                <ComboBoxItem Content="Oben Mitte" Tag="TopCenter" />
-                                <ComboBoxItem Content="Oben rechts" Tag="TopRight" />
-                                <ComboBoxItem Content="Mitte links" Tag="MiddleLeft" />
-                                <ComboBoxItem Content="Mitte" Tag="MiddleCenter" />
-                                <ComboBoxItem Content="Mitte rechts" Tag="MiddleRight" />
-                                <ComboBoxItem Content="Unten links" Tag="BottomLeft" />
-                                <ComboBoxItem Content="Unten Mitte" Tag="BottomCenter" />
-                                <ComboBoxItem Content="Unten rechts" Tag="BottomRight" />
+                            <TextBlock x:Name="UiLanguageLabel" VerticalAlignment="Center" />
+                            <ComboBox x:Name="UiLanguageCombo" Width="160" SelectionChanged="OnUiLanguageChanged" />
+                            <CheckBox x:Name="AutoStartCheck" Click="OnAutoStartToggle" />
+                            <CheckBox x:Name="HudEnabledCheck" Click="OnFieldChanged" />
+                            <ComboBox x:Name="HudPositionCombo" Width="200" SelectionChanged="OnFieldChanged">
+                                <ComboBoxItem Tag="TopLeft" />
+                                <ComboBoxItem Tag="TopCenter" />
+                                <ComboBoxItem Tag="TopRight" />
+                                <ComboBoxItem Tag="MiddleLeft" />
+                                <ComboBoxItem Tag="MiddleCenter" />
+                                <ComboBoxItem Tag="MiddleRight" />
+                                <ComboBoxItem Tag="BottomLeft" />
+                                <ComboBoxItem Tag="BottomCenter" />
+                                <ComboBoxItem Tag="BottomRight" />
                             </ComboBox>
-                            <Button Content="HUD-Vorschau" Click="OnHudPreview" />
+                            <Button x:Name="HudPreviewButton" Click="OnHudPreview" />
                         </StackPanel>
 
                         <StackPanel Grid.Row="9" Spacing="6">
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button Content="In Tray minimieren" Click="OnMinimizeToTray" />
-                                <Button Content="Log öffnen" Click="OnOpenLog" />
-                                <Button Content="Server testen" Click="OnTestServer" />
-                                <Button Content="Auf Updates prüfen" Click="OnCheckUpdates" />
-                                <Button x:Name="ApplyUpdateButton" Content="Update installieren"
+                                <Button x:Name="BtnMinimize" Click="OnMinimizeToTray" />
+                                <Button x:Name="BtnOpenLog" Click="OnOpenLog" />
+                                <Button x:Name="BtnTestServer" Click="OnTestServer" />
+                                <Button x:Name="BtnCheckUpdates" Click="OnCheckUpdates" />
+                                <Button x:Name="ApplyUpdateButton"
                                         Click="OnApplyUpdate" Visibility="Collapsed"
                                         Style="{StaticResource AccentButtonStyle}" />
                             </StackPanel>

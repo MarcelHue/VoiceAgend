@@ -31,6 +31,9 @@ public sealed class AppSettings
     public string ApiKey { get; set; } = "";
     public string Language { get; set; } = "";
 
+    /// <summary>UI-Sprache (eigenständig von der Spracherkennungs-Sprache).</summary>
+    public string UiLanguage { get; set; } = "de";
+
     /// <summary>WaveIn-Device-Number; -1 = Windows-Default.</summary>
     public int MicDeviceNumber { get; set; } = -1;
     public string MicDeviceName { get; set; } = "Standard";

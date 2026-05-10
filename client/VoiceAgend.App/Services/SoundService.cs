@@ -81,15 +81,19 @@ public sealed class SoundService
         SoundChoice.Beep,
     };
 
-    public static string Display(SoundChoice c) => c switch
+    public static string Display(SoundChoice c)
     {
-        SoundChoice.None => "Aus",
-        SoundChoice.Chimes => "Chimes",
-        SoundChoice.Chord => "Chord",
-        SoundChoice.Ding => "Ding",
-        SoundChoice.Notify => "Notify",
-        SoundChoice.Tada => "Tada",
-        SoundChoice.Beep => "System-Beep",
-        _ => c.ToString(),
-    };
+        var L = App.Current.Loc;
+        return c switch
+        {
+            SoundChoice.None => L.T("Settings.Sound.None"),
+            SoundChoice.Chimes => "Chimes",
+            SoundChoice.Chord => "Chord",
+            SoundChoice.Ding => "Ding",
+            SoundChoice.Notify => "Notify",
+            SoundChoice.Tada => "Tada",
+            SoundChoice.Beep => L.T("Settings.Sound.SystemBeep"),
+            _ => c.ToString(),
+        };
+    }
 }
