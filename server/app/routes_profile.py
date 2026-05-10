@@ -36,9 +36,7 @@ class ProfileUpdate(BaseModel):
 @router.get("/models", response_model=list[ModelOut])
 async def list_models(_: Annotated[tuple[ApiKey, User], Depends(require_api_key)]):
     """Whisper-Modelle vom Speaches-Backend (gecacht/lokal verfügbar)."""
-    headers = {}
-    if settings.whisper_api_key:
-        headers["Authorization"] = f"Bearer {settings.whisper_api_key}"
+    headers = _whisper_headers()
     try:
         async with httpx.AsyncClient(timeout=10.0, headers=headers) as c:
             r = await c.get(f"{settings.whisper_url.rstrip('/')}/v1/models")
@@ -47,6 +45,31 @@ async def list_models(_: Annotated[tuple[ApiKey, User], Depends(require_api_key)
             return [ModelOut(**m) for m in data]
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"whisper backend unreachable: {e}")
+
+
+@router.post("/models/{model_id:path}", status_code=202)
+async def install_model(
+    model_id: str,
+    _: Annotated[tuple[ApiKey, User], Depends(require_api_key)],
+):
+    """Triggert den Download eines Modells im Speaches-Backend.
+    Modelle können mehrere GB groß sein — Timeout ist großzügig (10 min)."""
+    headers = _whisper_headers()
+    try:
+        async with httpx.AsyncClient(timeout=600.0, headers=headers) as c:
+            r = await c.post(f"{settings.whisper_url.rstrip('/')}/v1/models/{model_id}")
+            if r.status_code >= 400:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"speaches HTTP {r.status_code}: {r.text[:300]}",
+                )
+            return {"status": "installed", "model": model_id}
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"whisper backend unreachable: {e}")
+
+
+def _whisper_headers() -> dict:
+    return {"Authorization": f"Bearer {settings.whisper_api_key}"} if settings.whisper_api_key else {}
 
 
 @router.get("/profile", response_model=ProfileOut)

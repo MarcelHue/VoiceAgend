@@ -38,6 +38,21 @@ public sealed class ServerApiClient
         return (await r.Content.ReadFromJsonAsync<Profile>(JsonOpts, ct))!;
     }
 
+    public async Task InstallModelAsync(
+        string baseUrl, string apiKey, string modelId,
+        CancellationToken ct = default)
+    {
+        // Server-Side timeout ist auf 10 min — Client gibt etwas mehr (12 min).
+        using var http = Build(baseUrl, apiKey);
+        http.Timeout = TimeSpan.FromMinutes(12);
+        var r = await http.PostAsync($"/api/v1/models/{modelId}", content: null, ct);
+        if (!r.IsSuccessStatusCode)
+        {
+            var body = await r.Content.ReadAsStringAsync(ct);
+            throw new InvalidOperationException($"HTTP {(int)r.StatusCode}: {body}");
+        }
+    }
+
     public async Task<Profile> UpdateProfileAsync(
         string baseUrl, string apiKey,
         string? model, string? prompt, double? temperature,

@@ -72,7 +72,7 @@ public sealed partial class MainWindow : Window
         var s = App.Current.Settings;
         ServerUrlBox.Text = s.ServerUrl;
         ApiKeyBox.Password = s.ApiKey;
-        LanguageBox.Text = s.Language;
+        SetLanguageSelection(s.Language);
 
         MicCombo.Items.Clear();
         MicCombo.Items.Add(new MicEntry(-1, "Standard (Windows-Default)"));
@@ -149,6 +149,8 @@ public sealed partial class MainWindow : Window
 
     private async void OnProfileLoad(object sender, RoutedEventArgs e) => await LoadProfileAsync(force: true);
 
+    private HashSet<string> _installedModels = new();
+
     private async Task LoadProfileAsync(bool force = false)
     {
         var s = App.Current.Settings;
@@ -164,6 +166,8 @@ public sealed partial class MainWindow : Window
 
             // Modell-Liste
             var models = await App.Current.ServerApi.ListModelsAsync(baseUrl, s.ApiKey);
+            _installedModels = new HashSet<string>(models.Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
+
             ServerModelCombo.Items.Clear();
             ServerModelCombo.Items.Add("(Server-Default)");
             foreach (var m in models) ServerModelCombo.Items.Add(m.Id);
@@ -183,12 +187,127 @@ public sealed partial class MainWindow : Window
             ServerTempSlider.Value = p.Temperature;
             ServerTempLabel.Text = $"Temperature: {p.Temperature:F2}";
 
-            ProfileStatus.Text = $"Geladen ({models.Count} Modelle).";
+            BuildCatalogList();
+
+            ProfileStatus.Text = $"Geladen ({models.Count} Modelle installiert).";
         }
         catch (Exception ex)
         {
             Logger.Error("Profile load", ex);
             ProfileStatus.Text = $"Fehler: {ex.Message}";
+        }
+    }
+
+    private void BuildCatalogList()
+    {
+        ModelCatalogList.Items.Clear();
+        foreach (var entry in ModelCatalog.All)
+        {
+            ModelCatalogList.Items.Add(BuildCatalogRow(entry));
+        }
+    }
+
+    private FrameworkElement BuildCatalogRow(ModelCatalog.Entry entry)
+    {
+        var installed = _installedModels.Contains(entry.Id);
+
+        var grid = new Grid { Margin = new Thickness(0, 6, 0, 6), ColumnSpacing = 12 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var info = new StackPanel { Spacing = 2 };
+        info.Children.Add(new TextBlock
+        {
+            Text = $"{entry.Label}  ·  {entry.SizeApprox}",
+            Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
+        });
+        info.Children.Add(new TextBlock
+        {
+            Text = entry.Hint, TextWrapping = TextWrapping.Wrap,
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            FontSize = 12,
+        });
+        info.Children.Add(new TextBlock
+        {
+            Text = entry.Id, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            FontSize = 11,
+        });
+        Grid.SetColumn(info, 0);
+
+        var actionPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        if (installed)
+        {
+            actionPanel.Children.Add(new TextBlock
+            {
+                Text = "✓ Installiert", VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.SeaGreen),
+            });
+        }
+        else
+        {
+            var progress = new ProgressRing { IsActive = false, Width = 18, Height = 18 };
+            var btn = new Button { Content = "Installieren" };
+            btn.Click += async (_, _) => await InstallModelAsync(entry, btn, progress);
+            actionPanel.Children.Add(progress);
+            actionPanel.Children.Add(btn);
+        }
+        Grid.SetColumn(actionPanel, 1);
+
+        grid.Children.Add(info);
+        grid.Children.Add(actionPanel);
+        return grid;
+    }
+
+    private async Task InstallModelAsync(ModelCatalog.Entry entry, Button btn, ProgressRing progress)
+    {
+        var s = App.Current.Settings;
+        if (string.IsNullOrWhiteSpace(s.ApiKey)) return;
+
+        btn.IsEnabled = false;
+        btn.Content = "Wird geladen…";
+        progress.IsActive = true;
+
+        // Polling-Task: prüft alle 5 s, ob das Modell schon in der lokalen Liste auftaucht.
+        // Gibt dem User Feedback, falls die POST-Antwort sehr lange braucht.
+        using var cts = new CancellationTokenSource();
+        var pollTask = Task.Run(async () =>
+        {
+            var startedAt = DateTime.Now;
+            while (!cts.IsCancellationRequested)
+            {
+                try
+                {
+                    var baseUrl = ServerApiClient.ToHttpBase(s.ServerUrl);
+                    var models = await App.Current.ServerApi.ListModelsAsync(baseUrl, s.ApiKey, cts.Token);
+                    if (models.Any(m => string.Equals(m.Id, entry.Id, StringComparison.OrdinalIgnoreCase)))
+                        return; // installiert!
+                }
+                catch { /* ignorieren, wir versuchen's weiter */ }
+                var elapsed = (int)(DateTime.Now - startedAt).TotalSeconds;
+                DispatcherQueue.TryEnqueue(() => btn.Content = $"Lädt… ({elapsed}s)");
+                try { await Task.Delay(TimeSpan.FromSeconds(5), cts.Token); } catch { }
+            }
+        });
+
+        try
+        {
+            var baseUrl = ServerApiClient.ToHttpBase(s.ServerUrl);
+            await App.Current.ServerApi.InstallModelAsync(baseUrl, s.ApiKey, entry.Id);
+            cts.Cancel();
+            progress.IsActive = false;
+            btn.Content = "✓ Fertig";
+            await Task.Delay(800);
+            await LoadProfileAsync(force: true); // Liste neu aufbauen
+        }
+        catch (Exception ex)
+        {
+            cts.Cancel();
+            Logger.Error("Model install", ex);
+            progress.IsActive = false;
+            btn.IsEnabled = true;
+            btn.Content = "Erneut versuchen";
+            ProfileStatus.Text = $"Install-Fehler: {ex.Message}";
         }
     }
 
@@ -242,7 +361,7 @@ public sealed partial class MainWindow : Window
         var s = App.Current.Settings;
         s.ServerUrl = ServerUrlBox.Text.Trim();
         s.ApiKey = ApiKeyBox.Password.Trim();
-        s.Language = LanguageBox.Text.Trim();
+        s.Language = ReadLanguageSelection();
 
         if (MicCombo.SelectedItem is MicEntry mic)
         {
@@ -274,6 +393,22 @@ public sealed partial class MainWindow : Window
 
     private void OnFieldLostFocus(object sender, RoutedEventArgs e) => AutoSave();
     private void OnFieldChanged(object sender, object e) => AutoSave();
+
+    private void SetLanguageSelection(string lang)
+    {
+        foreach (ComboBoxItem item in LanguageCombo.Items)
+        {
+            if ((string)item.Tag == (lang ?? ""))
+            {
+                LanguageCombo.SelectedItem = item;
+                return;
+            }
+        }
+        LanguageCombo.SelectedIndex = 0;
+    }
+
+    private string ReadLanguageSelection() =>
+        LanguageCombo.SelectedItem is ComboBoxItem ci ? (string)ci.Tag : "";
 
     private static void InitSoundCombo(ComboBox combo, SoundChoice selected)
     {

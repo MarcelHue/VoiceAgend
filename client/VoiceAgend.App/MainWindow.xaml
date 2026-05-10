@@ -86,6 +86,7 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
                         <TextBlock Grid.Row="0" Text="Server-Profil"
@@ -129,6 +130,17 @@
                         <TextBlock Grid.Row="6" x:Name="ProfileApiKeyLabel"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    FontStyle="Italic" />
+
+                        <StackPanel Grid.Row="7" Spacing="10" Margin="0,16,0,0">
+                            <TextBlock Text="Modelle installieren" Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"
+                                       Text="Lädt das gewählte Modell auf dem Server in den Whisper-Cache. Größere Modelle brauchen mehrere Minuten." />
+                            <ItemsControl x:Name="ModelCatalogList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate />
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                     </Grid>
                 </ScrollViewer>
 
@@ -164,9 +176,13 @@
                         </StackPanel>
 
                         <StackPanel Grid.Row="3" Spacing="6">
-                            <TextBlock Text="Sprache (z. B. de, en, leer = auto)" />
-                            <TextBox x:Name="LanguageBox" Width="120" HorizontalAlignment="Left"
-                                     LostFocus="OnFieldLostFocus" />
+                            <TextBlock Text="Sprache" />
+                            <ComboBox x:Name="LanguageCombo" Width="220" HorizontalAlignment="Left"
+                                      SelectionChanged="OnFieldChanged">
+                                <ComboBoxItem Content="Auto-erkennen" Tag="" />
+                                <ComboBoxItem Content="Deutsch" Tag="de" />
+                                <ComboBoxItem Content="Englisch" Tag="en" />
+                            </ComboBox>
                         </StackPanel>
 
                         <StackPanel Grid.Row="4" Spacing="6">
