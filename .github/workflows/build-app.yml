@@ -5,12 +5,10 @@ on:
     branches: [main]
     paths:
       - 'client/**'
+      - '!client/**/*.md'
+      - '!client/**/README*'
+      - '!client/**/LICENSE'
       - '.github/workflows/build-app.yml'
-    paths-ignore:
-      - '**/*.md'
-      - '**/README*'
-      - '**/LICENSE'
-      - '**/.gitignore'
   workflow_dispatch:
 
 permissions:
