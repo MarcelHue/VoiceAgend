@@ -5,9 +5,11 @@ on:
     branches: [main]
     paths:
       - 'server/**'
-      - '!server/**/*.md'
-      - '!server/**/LICENSE'
       - '.github/workflows/build-server.yml'
+    paths-ignore:
+      - '**/*.md'
+      - '**/LICENSE'
+      - '**/.gitignore'
   workflow_dispatch:
 
 env:
