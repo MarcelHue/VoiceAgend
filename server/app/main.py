@@ -20,8 +20,10 @@ from .routes_profile import router as profile_router
 
 async def ensure_default_admin() -> None:
     async with SessionLocal() as db:
-        res = await db.execute(select(User).where(User.is_admin == True))
-        if res.scalar_one_or_none():
+        # .first() statt .scalar_one_or_none() — wir prüfen nur ob >=1 Admin existiert.
+        # scalar_one_or_none() wirft MultipleResultsFound, wenn schon mehrere Admins angelegt sind.
+        res = await db.execute(select(User).where(User.is_admin == True).limit(1))
+        if res.first() is not None:
             return
         username = os.getenv("VOICEAGEND_ADMIN_USER", "admin")
         password = os.getenv("VOICEAGEND_ADMIN_PASSWORD", "admin")
