@@ -3,32 +3,40 @@ namespace VoiceAgend.App.Services;
 /// <summary>Kuratierte Liste empfohlener Whisper-Modelle für den Install-Button.</summary>
 public static class ModelCatalog
 {
-    public sealed record Entry(string Id, string Label, string SizeApprox, string Hint);
+    public sealed record Entry(
+        string Id,
+        string ShortName,
+        string Tag,
+        string Label,
+        string SizeApprox,
+        double Rtf,
+        string Hint);
 
+    /// <summary>Hint-Keys werden zur Anzeige durch LocalizationService aufgelöst.</summary>
     public static IReadOnlyList<Entry> All { get; } = new[]
     {
         new Entry("Systran/faster-whisper-tiny",
-            "Tiny (multilingual)", "~75 MB",
-            "Schnell, geringer Speicherbedarf — Qualität für Diktat ausreichend bei klarer Sprache."),
+            "tiny", "multilingual",
+            "Tiny", "~75 MB", 0.15, "Models.Hint.Tiny"),
 
         new Entry("Systran/faster-whisper-base",
-            "Base (multilingual)", "~150 MB",
-            "Gute Balance zwischen Speed und Qualität für mobile/schwache Server."),
+            "base", "multilingual",
+            "Base", "~150 MB", 0.25, "Models.Hint.Base"),
 
         new Entry("Systran/faster-whisper-small",
-            "Small (multilingual)", "~500 MB",
-            "Spürbar besser als Base, immer noch sehr schnell auf CPU."),
+            "small", "multilingual",
+            "Small", "~500 MB", 0.55, "Models.Hint.Small"),
 
         new Entry("Systran/faster-whisper-medium",
-            "Medium (multilingual)", "~1.5 GB",
-            "Default-Empfehlung. Auf modernen 6-Kernern ungefähr Echtzeit. Guter Trade-off."),
+            "medium", "multilingual",
+            "Medium", "~1.5 GB", 0.91, "Models.Hint.Medium"),
 
         new Entry("Systran/faster-whisper-large-v3",
-            "Large v3 (multilingual)", "~3 GB",
-            "Höchste Qualität, deutlich langsamer auf CPU (~3× Echtzeit)."),
+            "large-v3", "multilingual",
+            "Large v3", "~3 GB", 3.10, "Models.Hint.LargeV3"),
 
         new Entry("Systran/faster-distil-whisper-large-v3",
-            "Distil-Large v3 (English-fokussiert)", "~1.5 GB",
-            "Destillierte Variante — fast Large-Qualität bei Medium-Speed. English deutlich besser als andere Sprachen."),
+            "distil-large-v3", "english",
+            "Distil-Large v3", "~1.5 GB", 1.10, "Models.Hint.DistilLargeV3"),
     };
 }

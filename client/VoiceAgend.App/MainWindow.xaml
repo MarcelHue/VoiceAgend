@@ -3,9 +3,14 @@
     x:Class="VoiceAgend.App.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:tray="using:H.NotifyIcon">
+    xmlns:tray="using:H.NotifyIcon"
+    xmlns:views="using:VoiceAgend.App.Views">
 
-    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <Grid Background="{ThemeResource VABgBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="36" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
         <tray:TaskbarIcon
             x:Name="TrayIcon"
@@ -23,14 +28,62 @@
             </tray:TaskbarIcon.ContextFlyout>
         </tray:TaskbarIcon>
 
+        <!-- ============================ CUSTOM TITLE BAR ============================ -->
+        <Grid x:Name="AppTitleBar" Grid.Row="0" Height="36"
+              Background="{ThemeResource VABgRaisedBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Brand-Mark links -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8"
+                        VerticalAlignment="Center" Margin="12,0,0,0">
+                <Ellipse Width="16" Height="16" Fill="{ThemeResource VAAccentBrush}" />
+                <TextBlock Text="VoiceAgend" FontWeight="SemiBold" FontSize="13"
+                           VerticalAlignment="Center"
+                           FontFamily="{StaticResource VAFont}"
+                           Foreground="{ThemeResource VATextDimBrush}" />
+            </StackPanel>
+
+            <!-- Zentrierter Window-Title (drag region) -->
+            <TextBlock Grid.Column="1" x:Name="WindowTitleLabel"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       FontFamily="{StaticResource VAFontMono}"
+                       FontSize="11.5"
+                       Foreground="{ThemeResource VATextMuteBrush}" />
+
+            <!-- Online-Pill rechts -->
+            <Border Grid.Column="2" x:Name="OnlinePill" VerticalAlignment="Center"
+                    Margin="0,0,12,0" Padding="9,2"
+                    Background="Transparent"
+                    BorderBrush="{ThemeResource VABorderBrush}"
+                    BorderThickness="1" CornerRadius="11">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <Ellipse Width="6" Height="6" Fill="{ThemeResource VAOkBrush}" />
+                    <TextBlock x:Name="OnlinePillText"
+                               FontFamily="{StaticResource VAFontMono}" FontSize="11"
+                               Foreground="{ThemeResource VATextDimBrush}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Reservierter Bereich für Min/Max/Close (Windows zeichnet sie selbst) -->
+            <Border Grid.Column="3" x:Name="RightInset" Width="138" />
+        </Grid>
+
         <NavigationView
+            Grid.Row="1"
             x:Name="Nav"
-            PaneDisplayMode="Left"
+            PaneDisplayMode="LeftCompact"
+            CompactPaneLength="64"
+            OpenPaneLength="64"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="False"
+            IsPaneToggleButtonVisible="False"
             SelectionChanged="OnNavSelectionChanged"
-            OpenPaneLength="200"
-            IsPaneToggleButtonVisible="True">
+            Background="{ThemeResource VABgBrush}">
             <NavigationView.MenuItems>
                 <NavigationViewItem Tag="home" Icon="Document" />
                 <NavigationViewItem Tag="profile" Icon="Globe" />
@@ -39,259 +92,770 @@
 
             <Grid>
                 <!-- ========================== TRANSKRIPT-SEITE ========================== -->
-                <Grid x:Name="HomeView" Padding="24" RowSpacing="14">
+                <Grid x:Name="HomeView" Padding="14,10,18,18" RowSpacing="14">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <Grid Grid.Row="0">
+                    <!-- =========== HERO CARD =========== -->
+                    <Border Grid.Row="0" Style="{StaticResource VAGlassCard}" Padding="20,18">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Big circular mic / record button -->
+                            <Button x:Name="MicButton" Grid.Column="0"
+                                    Width="80" Height="80" CornerRadius="40"
+                                    Padding="0" Margin="0,0,22,0"
+                                    Click="OnTrayToggle"
+                                    Background="Transparent"
+                                    BorderBrush="{ThemeResource VABorderBrush}"
+                                    BorderThickness="1">
+                                <Grid x:Name="MicButtonContent"
+                                      Width="76" Height="76" CornerRadius="38">
+                                    <Ellipse x:Name="MicButtonBg" Width="76" Height="76">
+                                        <Ellipse.Fill>
+                                            <RadialGradientBrush x:Name="MicButtonGradient"
+                                                                 Center="0.3,0.3" RadiusX="0.9" RadiusY="0.9">
+                                                <GradientStop Color="#1f2229" Offset="0" />
+                                                <GradientStop Color="#0a0a0a" Offset="1" />
+                                            </RadialGradientBrush>
+                                        </Ellipse.Fill>
+                                    </Ellipse>
+                                    <Rectangle x:Name="MicStopIcon" Width="22" Height="22"
+                                               RadiusX="4" RadiusY="4"
+                                               Fill="White" Visibility="Collapsed" />
+                                    <FontIcon x:Name="MicIcon" Glyph="&#xE720;" FontSize="28"
+                                              Foreground="{ThemeResource VAAccentBrush}" />
+                                </Grid>
+                            </Button>
+
+                            <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
+                                <!-- Status badge + hotkey hint -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <Ellipse x:Name="HeroDot" Width="6" Height="6"
+                                                 Fill="{ThemeResource VATextMuteBrush}" />
+                                        <TextBlock x:Name="HeroStateLabel"
+                                                   Style="{StaticResource VASectionLabel}"
+                                                   Foreground="{ThemeResource VATextMuteBrush}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <TextBlock x:Name="HeroHotkeyHintLabel"
+                                                   Style="{StaticResource VASectionLabel}" />
+                                        <Border x:Name="HotkeyKbd"
+                                                BorderBrush="{ThemeResource VABorderSoftBrush}"
+                                                BorderThickness="1" CornerRadius="4"
+                                                Padding="6,1">
+                                            <TextBlock x:Name="HotkeyKbdLabel"
+                                                       Style="{StaticResource VAMono}" FontSize="11"
+                                                       Foreground="{ThemeResource VATextDimBrush}" />
+                                        </Border>
+                                        <TextBlock x:Name="HeroHotkeyTrailLabel"
+                                                   Style="{StaticResource VASectionLabel}" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Headline (timer when recording, "Aufnahme starten" when idle) -->
+                                <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Bottom">
+                                    <TextBlock x:Name="HeroHeadline"
+                                               FontFamily="{StaticResource VAFont}"
+                                               FontSize="28" FontWeight="SemiBold"
+                                               Foreground="{ThemeResource VATextBrush}" />
+                                    <TextBlock x:Name="HeroTimer"
+                                               Style="{StaticResource VAMono}"
+                                               FontSize="36" FontWeight="Medium"
+                                               Foreground="{ThemeResource VATextBrush}"
+                                               Visibility="Collapsed" />
+                                    <TextBlock x:Name="HeroMetaLabel"
+                                               Style="{StaticResource VAMono}" FontSize="11"
+                                               Foreground="{ThemeResource VATextMuteBrush}"
+                                               VerticalAlignment="Bottom" Margin="0,0,0,6" />
+                                </StackPanel>
+
+                                <!-- Waveform -->
+                                <views:LiveWaveform x:Name="HeroWave" Height="44" Margin="0,8,0,0" />
+                            </StackPanel>
+
+                            <!-- Hotkey toggle, top right -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10"
+                                        VerticalAlignment="Top">
+                                <TextBlock x:Name="HotkeyEnabledLabel" VerticalAlignment="Center"
+                                           Foreground="{ThemeResource VATextMuteBrush}" FontSize="11" />
+                                <ToggleSwitch x:Name="HotkeyEnabledToggle"
+                                              Toggled="OnHotkeyEnabledToggled" MinWidth="0"
+                                              OnContent="" OffContent="" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- =========== BODY: TRANSCRIPT + SIDEBAR =========== -->
+                    <Grid Grid.Row="1" ColumnSpacing="14">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="280" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" x:Name="HomeTitle"
-                                   Style="{StaticResource TitleTextBlockStyle}" />
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                            <TextBlock x:Name="HotkeyEnabledLabel" VerticalAlignment="Center"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <ToggleSwitch x:Name="HotkeyEnabledToggle"
-                                          Toggled="OnHotkeyEnabledToggled"
-                                          MinWidth="0" />
-                        </StackPanel>
+
+                        <!-- Transcript card -->
+                        <Border Grid.Column="0" Style="{StaticResource VAGlassCard}" Padding="20,18">
+                            <Grid RowSpacing="10">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <Grid Grid.Row="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="TranscriptSectionLabel" Grid.Column="0"
+                                               Style="{StaticResource VASectionLabel}"
+                                               VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                                        <Button x:Name="BtnCopyTranscript" Click="OnCopyTranscript"
+                                                Background="Transparent" BorderThickness="0" Padding="6">
+                                            <FontIcon Glyph="&#xE8C8;" FontSize="14"
+                                                      Foreground="{ThemeResource VATextDimBrush}" />
+                                        </Button>
+                                        <Button x:Name="BtnClearTranscript" Click="OnClearTranscript"
+                                                Background="Transparent" BorderThickness="0" Padding="6">
+                                            <FontIcon Glyph="&#xE74D;" FontSize="14"
+                                                      Foreground="{ThemeResource VATextDimBrush}" />
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Grid.Row="1" x:Name="HomeStatus"
+                                           Style="{StaticResource VAMono}" FontSize="11"
+                                           Foreground="{ThemeResource VATextMuteBrush}"
+                                           TextWrapping="Wrap" />
+
+                                <TextBox Grid.Row="2"
+                                         x:Name="TranscriptBox"
+                                         AcceptsReturn="True"
+                                         TextWrapping="Wrap"
+                                         IsReadOnly="False"
+                                         VerticalContentAlignment="Top"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                         FontSize="14.5"
+                                         FontFamily="{StaticResource VAFont}"
+                                         Background="Transparent"
+                                         BorderThickness="0" />
+
+                                <Border Grid.Row="3" BorderBrush="{ThemeResource VABorderSoftBrush}"
+                                        BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                                    <StackPanel Orientation="Horizontal" Spacing="16">
+                                        <TextBlock x:Name="TranscriptStatsWords"
+                                                   Style="{StaticResource VAMono}" FontSize="11"
+                                                   Foreground="{ThemeResource VATextMuteBrush}" />
+                                        <TextBlock x:Name="TranscriptStatsChars"
+                                                   Style="{StaticResource VAMono}" FontSize="11"
+                                                   Foreground="{ThemeResource VATextMuteBrush}" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <!-- Right sidebar: history (stretchend) + prompt (auto) -->
+                        <Grid Grid.Column="1" RowSpacing="14">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Border Grid.Row="0" Style="{StaticResource VAGlassCard}" Padding="14,12">
+                                <Grid RowSpacing="8">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <Grid Grid.Row="0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock x:Name="HistoryLabel" Grid.Column="0"
+                                                   Style="{StaticResource VASectionLabel}"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock x:Name="HistoryCount" Grid.Column="1"
+                                                   Style="{StaticResource VAMono}" FontSize="10.5"
+                                                   Foreground="{ThemeResource VATextMuteBrush}" />
+                                    </Grid>
+                                    <TextBox Grid.Row="1" x:Name="HistoryFilter"
+                                             TextChanged="OnHistoryFilterChanged"
+                                             Background="Transparent"
+                                             BorderBrush="{ThemeResource VABorderSoftBrush}"
+                                             FontSize="12" Height="30"
+                                             VerticalContentAlignment="Center" />
+                                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsControl x:Name="HistoryList" />
+                                    </ScrollViewer>
+                                </Grid>
+                            </Border>
+
+                            <Border Grid.Row="1" Style="{StaticResource VAGlassCard}" Padding="14,12">
+                                <StackPanel Spacing="8">
+                                    <TextBlock x:Name="PromptPreviewLabel"
+                                               Style="{StaticResource VASectionLabel}" />
+                                    <TextBlock x:Name="PromptPreviewText"
+                                               Style="{StaticResource VAMono}" FontSize="11.5"
+                                               Foreground="{ThemeResource VATextDimBrush}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
                     </Grid>
-
-                    <TextBlock Grid.Row="1" x:Name="HomeStatus"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               TextWrapping="Wrap" />
-
-                    <TextBox Grid.Row="2"
-                             x:Name="TranscriptBox"
-                             AcceptsReturn="True"
-                             TextWrapping="Wrap"
-                             IsReadOnly="False"
-                             VerticalContentAlignment="Top"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto"
-                             FontSize="14" />
-
-                    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10">
-                        <Button x:Name="BtnCopyTranscript" Click="OnCopyTranscript"
-                                Style="{StaticResource AccentButtonStyle}" />
-                        <Button x:Name="BtnClearTranscript" Click="OnClearTranscript" />
-                        <Button x:Name="BtnHomeToggle" Click="OnTrayToggle" />
-                    </StackPanel>
                 </Grid>
 
                 <!-- ========================== SERVER-PROFIL ========================== -->
                 <ScrollViewer x:Name="ProfileView" Visibility="Collapsed"
                               HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto">
-                    <Grid Padding="24" RowSpacing="14">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
+                    <StackPanel Padding="14,10,18,18" Spacing="14">
 
-                        <TextBlock Grid.Row="0" x:Name="ProfileTitle"
-                                   Style="{StaticResource TitleTextBlockStyle}" />
-
-                        <TextBlock Grid.Row="1" x:Name="ProfileDescription"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" />
-
-                        <StackPanel Grid.Row="2" Spacing="6" Orientation="Horizontal">
-                            <Button x:Name="ProfileLoadButton" Click="OnProfileLoad" />
-                            <Button x:Name="ProfileSaveButton" Click="OnProfileSave"
-                                    Style="{StaticResource AccentButtonStyle}" />
-                            <TextBlock x:Name="ProfileStatus" VerticalAlignment="Center"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Row="3" Spacing="6">
-                            <TextBlock x:Name="ProfileModelLabel" />
-                            <ComboBox x:Name="ServerModelCombo" Width="500" HorizontalAlignment="Left" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Row="4" Spacing="6">
-                            <TextBlock x:Name="ProfilePromptLabel" />
-                            <TextBox x:Name="ServerPromptBox"
-                                     AcceptsReturn="True" TextWrapping="Wrap" Height="80" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Row="5" Spacing="6">
-                            <TextBlock x:Name="ServerTempLabel" />
-                            <Slider x:Name="ServerTempSlider" Minimum="0" Maximum="1" StepFrequency="0.05"
-                                    Width="320" HorizontalAlignment="Left"
-                                    ValueChanged="OnTempChanged" />
-                            <TextBlock x:Name="ProfileTempHint" TextWrapping="Wrap"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-
-                        <TextBlock Grid.Row="6" x:Name="ProfileApiKeyLabel"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   FontStyle="Italic" />
-
-                        <StackPanel Grid.Row="7" Spacing="10" Margin="0,16,0,0">
-                            <TextBlock x:Name="ModelsTitle" Style="{StaticResource SubtitleTextBlockStyle}" />
-                            <TextBlock x:Name="ModelsDescription"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                            <ItemsControl x:Name="ModelCatalogList" />
-                        </StackPanel>
-                    </Grid>
-                </ScrollViewer>
-
-                <!-- ========================== EINSTELLUNGEN ========================== -->
-                <ScrollViewer x:Name="SettingsView" Visibility="Collapsed"
-                              HorizontalScrollBarVisibility="Disabled"
-                              VerticalScrollBarVisibility="Auto">
-                    <Grid Padding="24" RowSpacing="14">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-
-                        <TextBlock Grid.Row="0" x:Name="SettingsTitle"
-                                   Style="{StaticResource TitleTextBlockStyle}" />
-
-                        <StackPanel Grid.Row="1" Spacing="6">
-                            <TextBlock x:Name="ServerUrlLabel" />
-                            <TextBox x:Name="ServerUrlBox" LostFocus="OnFieldLostFocus" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Row="2" Spacing="6">
-                            <TextBlock x:Name="ApiKeyLabel" />
-                            <PasswordBox x:Name="ApiKeyBox" LostFocus="OnFieldLostFocus" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Row="3" Spacing="6">
-                            <TextBlock x:Name="LanguageLabel" />
-                            <ComboBox x:Name="LanguageCombo" Width="220" HorizontalAlignment="Left"
-                                      SelectionChanged="OnFieldChanged">
-                                <ComboBoxItem Tag="" />
-                                <ComboBoxItem Tag="de" />
-                                <ComboBoxItem Tag="en" />
-                            </ComboBox>
-                        </StackPanel>
-
-                        <StackPanel Grid.Row="4" Spacing="6">
-                            <TextBlock x:Name="MicLabel" />
-                            <ComboBox x:Name="MicCombo" Width="500" HorizontalAlignment="Left"
-                                      SelectionChanged="OnFieldChanged" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Row="5" Spacing="6">
-                            <TextBlock x:Name="HotkeyLabel" />
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button x:Name="HotkeyButton" Click="OnHotkeyRecord" />
-                                <TextBlock x:Name="HotkeyDisplay" VerticalAlignment="Center"
-                                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <!-- Header -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="4">
+                                <TextBlock x:Name="ProfileSectionLabel"
+                                           Style="{StaticResource VASectionLabel}" />
+                                <TextBlock x:Name="ProfileTitle"
+                                           Style="{StaticResource VAPageTitle}" />
                             </StackPanel>
-                        </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
+                                        VerticalAlignment="Bottom">
+                                <Border BorderBrush="{ThemeResource VABorderBrush}"
+                                        BorderThickness="1" CornerRadius="11" Padding="9,2"
+                                        VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Ellipse Width="6" Height="6"
+                                                 Fill="{ThemeResource VAOkBrush}" />
+                                        <TextBlock x:Name="ProfileStatus"
+                                                   FontFamily="{StaticResource VAFontMono}" FontSize="11"
+                                                   Foreground="{ThemeResource VATextDimBrush}" />
+                                    </StackPanel>
+                                </Border>
+                                <Button x:Name="ProfileLoadButton" Click="OnProfileLoad" />
+                                <Button x:Name="ProfileSaveButton" Click="OnProfileSave"
+                                        Style="{StaticResource AccentButtonStyle}" />
+                            </StackPanel>
+                        </Grid>
 
-                        <StackPanel Grid.Row="6" Spacing="6">
-                            <TextBlock x:Name="OutputModeLabel" />
-                            <ComboBox x:Name="OutputModeCombo" Width="320" HorizontalAlignment="Left"
-                                      SelectionChanged="OnFieldChanged">
-                                <ComboBoxItem Tag="Clipboard" />
-                                <ComboBoxItem Tag="Type" />
-                                <ComboBoxItem Tag="Notification" />
-                            </ComboBox>
-                        </StackPanel>
+                        <!-- 4 stat cards -->
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Row="7" Spacing="10">
-                            <CheckBox x:Name="ToastCheck" Click="OnFieldChanged" />
+                            <Border Grid.Column="0" Style="{StaticResource VAGlassCard}" Padding="14,12">
+                                <StackPanel Spacing="6">
+                                    <TextBlock x:Name="StatActiveModelLabel"
+                                               Style="{StaticResource VASectionLabel}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+                                        <TextBlock x:Name="StatActiveModelValue"
+                                                   Style="{StaticResource VAMono}" FontSize="22"
+                                                   FontWeight="Medium"
+                                                   Foreground="{ThemeResource VAAccentBrush}" />
+                                        <TextBlock x:Name="StatActiveModelTag"
+                                                   Style="{StaticResource VAMono}" FontSize="10.5"
+                                                   Foreground="{ThemeResource VATextMuteBrush}"
+                                                   VerticalAlignment="Bottom" Margin="0,0,0,2" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
 
-                            <TextBlock x:Name="SoundsTitle" Style="{StaticResource SubtitleTextBlockStyle}" />
-                            <Grid ColumnSpacing="12" RowSpacing="6">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="220" />
-                                    <ColumnDefinition Width="220" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <Border Grid.Column="1" Style="{StaticResource VAGlassCard}" Padding="14,12">
+                                <StackPanel Spacing="6">
+                                    <TextBlock x:Name="StatTempLabel"
+                                               Style="{StaticResource VASectionLabel}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+                                        <TextBlock x:Name="StatTempValue"
+                                                   Style="{StaticResource VAMono}" FontSize="22"
+                                                   FontWeight="Medium"
+                                                   Foreground="{ThemeResource VATextBrush}" />
+                                        <TextBlock x:Name="StatTempSub"
+                                                   Style="{StaticResource VAMono}" FontSize="10.5"
+                                                   Foreground="{ThemeResource VATextMuteBrush}"
+                                                   VerticalAlignment="Bottom" Margin="0,0,0,2" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="2" Style="{StaticResource VAGlassCard}" Padding="14,12">
+                                <StackPanel Spacing="6">
+                                    <TextBlock x:Name="StatPromptLabel"
+                                               Style="{StaticResource VASectionLabel}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+                                        <TextBlock x:Name="StatPromptValue"
+                                                   Style="{StaticResource VAMono}" FontSize="22"
+                                                   FontWeight="Medium"
+                                                   Foreground="{ThemeResource VATextBrush}" />
+                                        <TextBlock x:Name="StatPromptSub"
+                                                   Style="{StaticResource VAMono}" FontSize="10.5"
+                                                   Foreground="{ThemeResource VATextMuteBrush}"
+                                                   VerticalAlignment="Bottom" Margin="0,0,0,2" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="3" Style="{StaticResource VAGlassCard}" Padding="14,12">
+                                <StackPanel Spacing="6">
+                                    <TextBlock x:Name="StatApiKeyLabel"
+                                               Style="{StaticResource VASectionLabel}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+                                        <TextBlock x:Name="StatApiKeyValue"
+                                                   Style="{StaticResource VAMono}" FontSize="22"
+                                                   FontWeight="Medium"
+                                                   Foreground="{ThemeResource VATextBrush}" />
+                                        <TextBlock x:Name="StatApiKeyName"
+                                                   Style="{StaticResource VAMono}" FontSize="10.5"
+                                                   Foreground="{ThemeResource VATextMuteBrush}"
+                                                   VerticalAlignment="Bottom" Margin="0,0,0,2" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- Form: Prompt + Modell + Temperature -->
+                        <Border Style="{StaticResource VAGlassCard}" Padding="20">
+                            <Grid RowSpacing="18" ColumnSpacing="18">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
 
-                                <TextBlock Grid.Row="0" Grid.Column="0" x:Name="SoundOnStartLabel" VerticalAlignment="Center" />
-                                <ComboBox Grid.Row="0" Grid.Column="1" x:Name="SoundStartCombo" HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
-                                <Button Grid.Row="0" Grid.Column="2" x:Name="SoundStartPreview" Click="OnPlayStart" />
+                                <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Spacing="8">
+                                    <TextBlock x:Name="ProfilePromptLabel"
+                                               Style="{StaticResource VASectionLabel}" />
+                                    <TextBox x:Name="ServerPromptBox"
+                                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"
+                                             FontFamily="{StaticResource VAFontMono}" FontSize="12.5" />
+                                    <TextBlock x:Name="ProfilePromptHint" FontSize="11"
+                                               Foreground="{ThemeResource VATextMuteBrush}" />
+                                </StackPanel>
 
-                                <TextBlock Grid.Row="1" Grid.Column="0" x:Name="SoundOnStopLabel" VerticalAlignment="Center" />
-                                <ComboBox Grid.Row="1" Grid.Column="1" x:Name="SoundStopCombo" HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
-                                <Button Grid.Row="1" Grid.Column="2" x:Name="SoundStopPreview" Click="OnPlayStop" />
+                                <StackPanel Grid.Row="1" Grid.Column="0" Spacing="8">
+                                    <TextBlock x:Name="ProfileModelLabel"
+                                               Style="{StaticResource VASectionLabel}" />
+                                    <ComboBox x:Name="ServerModelCombo" HorizontalAlignment="Stretch" />
+                                </StackPanel>
 
-                                <TextBlock Grid.Row="2" Grid.Column="0" x:Name="SoundOnDoneLabel" VerticalAlignment="Center" />
-                                <ComboBox Grid.Row="2" Grid.Column="1" x:Name="SoundDoneCombo" HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
-                                <Button Grid.Row="2" Grid.Column="2" x:Name="SoundDonePreview" Click="OnPlayDone" />
+                                <StackPanel Grid.Row="1" Grid.Column="1" Spacing="8">
+                                    <TextBlock x:Name="ServerTempLabel"
+                                               Style="{StaticResource VASectionLabel}" />
+                                    <Slider x:Name="ServerTempSlider" Minimum="0" Maximum="1"
+                                            StepFrequency="0.05" ValueChanged="OnTempChanged" />
+                                    <TextBlock x:Name="ProfileTempHint" TextWrapping="Wrap" FontSize="11"
+                                               Foreground="{ThemeResource VATextMuteBrush}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
 
-                                <TextBlock Grid.Row="3" Grid.Column="0" x:Name="SoundOnErrorLabel" VerticalAlignment="Center" />
-                                <ComboBox Grid.Row="3" Grid.Column="1" x:Name="SoundErrorCombo" HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
-                                <Button Grid.Row="3" Grid.Column="2" x:Name="SoundErrorPreview" Click="OnPlayError" />
+                        <!-- Models grid -->
+                        <Border Style="{StaticResource VAGlassCard}" Padding="18">
+                            <StackPanel Spacing="14">
+                                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Bottom">
+                                    <TextBlock x:Name="ModelsSectionLabel"
+                                               Style="{StaticResource VASectionLabel}" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="ModelsTitle"
+                                               FontSize="15" FontWeight="SemiBold"
+                                               Foreground="{ThemeResource VATextBrush}" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="ModelsCount"
+                                               Style="{StaticResource VAMono}" FontSize="11"
+                                               Foreground="{ThemeResource VATextMuteBrush}"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                                <ItemsControl x:Name="ModelCatalogList" HorizontalContentAlignment="Stretch">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <views:WrapPanel HorizontalSpacing="10" VerticalSpacing="10"
+                                                              MinItemWidth="240" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                                <TextBlock x:Name="ProfileApiKeyLabel"
+                                           Style="{StaticResource VAMono}" FontSize="11" FontStyle="Italic"
+                                           Foreground="{ThemeResource VATextMuteBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- ========================== EINSTELLUNGEN ========================== -->
+                <Grid x:Name="SettingsView" Visibility="Collapsed" Padding="14,14,18,18" ColumnSpacing="14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="200" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Vertikale Sub-Navigation links -->
+                    <StackPanel Grid.Column="0" Spacing="2">
+                        <TextBlock x:Name="SettingsSectionLabel"
+                                   Style="{StaticResource VASectionLabel}"
+                                   Margin="10,4,10,8" />
+                        <Button x:Name="NavSettingsConnection" Click="OnSettingsNavClick" Tag="connection"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                Background="Transparent" BorderThickness="0" Padding="10,8">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon Glyph="&#xE12B;" FontSize="14" />
+                                <TextBlock x:Name="NavSettingsConnectionLabel" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="NavSettingsRecording" Click="OnSettingsNavClick" Tag="recording"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                Background="Transparent" BorderThickness="0" Padding="10,8">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon Glyph="&#xE720;" FontSize="14" />
+                                <TextBlock x:Name="NavSettingsRecordingLabel" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="NavSettingsSounds" Click="OnSettingsNavClick" Tag="sounds"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                Background="Transparent" BorderThickness="0" Padding="10,8">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon Glyph="&#xEA8F;" FontSize="14" />
+                                <TextBlock x:Name="NavSettingsSoundsLabel" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="NavSettingsSystem" Click="OnSettingsNavClick" Tag="system"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                Background="Transparent" BorderThickness="0" Padding="10,8">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon Glyph="&#xE950;" FontSize="14" />
+                                <TextBlock x:Name="NavSettingsSystemLabel" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Rechte Content-Spalte -->
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Spacing="14">
+
+                            <!-- Card-Header (Titel + Subtitle) -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock x:Name="SettingsTitle"
+                                               FontFamily="{StaticResource VAFont}"
+                                               FontSize="22" FontWeight="SemiBold"
+                                               Foreground="{ThemeResource VATextBrush}" />
+                                    <TextBlock x:Name="SettingsSubtitle"
+                                               FontSize="12"
+                                               Foreground="{ThemeResource VATextMuteBrush}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                            VerticalAlignment="Bottom" Visibility="Collapsed"
+                                            x:Name="SettingsSavedPanel">
+                                    <FontIcon Glyph="&#xE73E;" FontSize="13"
+                                              Foreground="{ThemeResource VAOkBrush}" />
+                                    <TextBlock x:Name="SettingsSavedIndicator"
+                                               Style="{StaticResource VAMono}" FontSize="11"
+                                               Foreground="{ThemeResource VATextMuteBrush}" />
+                                </StackPanel>
                             </Grid>
 
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock x:Name="VolumeLabel" VerticalAlignment="Center" Width="200" />
-                                <Slider x:Name="VolumeSlider" Width="240" Minimum="0" Maximum="100"
-                                        StepFrequency="5" ValueChanged="OnVolumeChanged" />
-                            </StackPanel>
-                        </StackPanel>
+                            <!-- Cards (jeweils nur eine sichtbar) -->
+                            <!-- ========== Connection ========== -->
+                            <Border x:Name="ConnectionCard" Style="{StaticResource VAGlassCard}" Padding="18">
+                                <StackPanel Spacing="14">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="2*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="5">
+                                            <TextBlock x:Name="ServerUrlLabel" FontSize="12"
+                                                       Foreground="{ThemeResource VATextDimBrush}" />
+                                            <TextBox x:Name="ServerUrlBox" LostFocus="OnFieldLostFocus"
+                                                     FontFamily="{StaticResource VAFontMono}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Spacing="5">
+                                            <TextBlock x:Name="LanguageLabel" FontSize="12"
+                                                       Foreground="{ThemeResource VATextDimBrush}" />
+                                            <ComboBox x:Name="LanguageCombo" HorizontalAlignment="Stretch"
+                                                      SelectionChanged="OnFieldChanged">
+                                                <ComboBoxItem Tag="" />
+                                                <ComboBoxItem Tag="de" />
+                                                <ComboBoxItem Tag="en" />
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </Grid>
+                                    <StackPanel Spacing="5">
+                                        <TextBlock x:Name="ApiKeyLabel" FontSize="12"
+                                                   Foreground="{ThemeResource VATextDimBrush}" />
+                                        <PasswordBox x:Name="ApiKeyBox" LostFocus="OnFieldLostFocus"
+                                                     FontFamily="{StaticResource VAFontMono}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
 
-                        <StackPanel Grid.Row="8" Spacing="6" Orientation="Horizontal">
-                            <TextBlock x:Name="UiLanguageLabel" VerticalAlignment="Center" />
-                            <ComboBox x:Name="UiLanguageCombo" Width="160" SelectionChanged="OnUiLanguageChanged" />
-                            <CheckBox x:Name="AutoStartCheck" Click="OnAutoStartToggle" />
-                            <CheckBox x:Name="HudEnabledCheck" Click="OnFieldChanged" />
-                            <ComboBox x:Name="HudPositionCombo" Width="200" SelectionChanged="OnFieldChanged">
-                                <ComboBoxItem Tag="TopLeft" />
-                                <ComboBoxItem Tag="TopCenter" />
-                                <ComboBoxItem Tag="TopRight" />
-                                <ComboBoxItem Tag="MiddleLeft" />
-                                <ComboBoxItem Tag="MiddleCenter" />
-                                <ComboBoxItem Tag="MiddleRight" />
-                                <ComboBoxItem Tag="BottomLeft" />
-                                <ComboBoxItem Tag="BottomCenter" />
-                                <ComboBoxItem Tag="BottomRight" />
-                            </ComboBox>
-                            <Button x:Name="HudPreviewButton" Click="OnHudPreview" />
-                        </StackPanel>
+                            <!-- ========== Recording (kombiniert: Mikrofon + Hotkey + Ausgabe + Toast) ========== -->
+                            <Border x:Name="RecordingCard" Style="{StaticResource VAGlassCard}" Padding="18"
+                                    Visibility="Collapsed">
+                                <StackPanel Spacing="16">
+                                    <StackPanel Spacing="5">
+                                        <TextBlock x:Name="MicLabel" FontSize="13"
+                                                   Foreground="{ThemeResource VATextBrush}" FontWeight="SemiBold" />
+                                        <ComboBox x:Name="MicCombo" HorizontalAlignment="Stretch"
+                                                  SelectionChanged="OnFieldChanged" />
+                                    </StackPanel>
+                                    <StackPanel Spacing="5">
+                                        <TextBlock x:Name="HotkeyLabel" FontSize="13"
+                                                   Foreground="{ThemeResource VATextBrush}" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="HotkeyHintLabel" FontSize="11.5"
+                                                   Foreground="{ThemeResource VATextMuteBrush}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <Button x:Name="HotkeyButton" Click="OnHotkeyRecord" />
+                                            <TextBlock x:Name="HotkeyDisplay" VerticalAlignment="Center"
+                                                       FontFamily="{StaticResource VAFontMono}"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{ThemeResource VATextBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <StackPanel Spacing="5">
+                                        <TextBlock x:Name="OutputModeLabel" FontSize="13"
+                                                   Foreground="{ThemeResource VATextBrush}" FontWeight="SemiBold" />
+                                        <ComboBox x:Name="OutputModeCombo" HorizontalAlignment="Stretch"
+                                                  SelectionChanged="OnFieldChanged">
+                                            <ComboBoxItem Tag="Clipboard" />
+                                            <ComboBoxItem Tag="Type" />
+                                            <ComboBoxItem Tag="Notification" />
+                                        </ComboBox>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="14">
+                                        <TextBlock x:Name="ToastCheckLabel" VerticalAlignment="Center"
+                                                   FontSize="13" Foreground="{ThemeResource VATextBrush}" />
+                                        <ToggleSwitch x:Name="ToastToggle" MinWidth="0"
+                                                      OnContent="" OffContent=""
+                                                      Toggled="OnFieldChanged" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
 
-                        <StackPanel Grid.Row="9" Spacing="6">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button x:Name="BtnMinimize" Click="OnMinimizeToTray" />
-                                <Button x:Name="BtnOpenLog" Click="OnOpenLog" />
-                                <Button x:Name="BtnTestServer" Click="OnTestServer" />
-                                <Button x:Name="BtnCheckUpdates" Click="OnCheckUpdates" />
-                                <Button x:Name="ApplyUpdateButton"
-                                        Click="OnApplyUpdate" Visibility="Collapsed"
-                                        Style="{StaticResource AccentButtonStyle}" />
-                            </StackPanel>
-                            <TextBlock x:Name="UpdateStatus"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <TextBlock x:Name="StatusText" TextWrapping="Wrap" MaxWidth="900"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <!-- ========== Sounds (vertikal) ========== -->
+                            <Border x:Name="SoundsCard" Style="{StaticResource VAGlassCard}" Padding="18"
+                                    Visibility="Collapsed">
+                                <StackPanel Spacing="14">
+                                    <!-- Eine Zeile pro Event -->
+                                    <Grid ColumnSpacing="14" RowSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="200" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0" x:Name="SoundOnStartLabel"
+                                                   VerticalAlignment="Center" FontSize="13" />
+                                        <ComboBox Grid.Row="0" Grid.Column="1" x:Name="SoundStartCombo"
+                                                  HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
+                                        <Button Grid.Row="0" Grid.Column="2" x:Name="SoundStartPreview"
+                                                Click="OnPlayStart">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE768;" FontSize="11" />
+                                                <TextBlock x:Name="SoundStartPreviewLabel" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" x:Name="SoundOnStopLabel"
+                                                   VerticalAlignment="Center" FontSize="13" />
+                                        <ComboBox Grid.Row="1" Grid.Column="1" x:Name="SoundStopCombo"
+                                                  HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
+                                        <Button Grid.Row="1" Grid.Column="2" x:Name="SoundStopPreview"
+                                                Click="OnPlayStop">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE768;" FontSize="11" />
+                                                <TextBlock x:Name="SoundStopPreviewLabel" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" x:Name="SoundOnDoneLabel"
+                                                   VerticalAlignment="Center" FontSize="13" />
+                                        <ComboBox Grid.Row="2" Grid.Column="1" x:Name="SoundDoneCombo"
+                                                  HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
+                                        <Button Grid.Row="2" Grid.Column="2" x:Name="SoundDonePreview"
+                                                Click="OnPlayDone">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE768;" FontSize="11" />
+                                                <TextBlock x:Name="SoundDonePreviewLabel" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <TextBlock Grid.Row="3" Grid.Column="0" x:Name="SoundOnErrorLabel"
+                                                   VerticalAlignment="Center" FontSize="13" />
+                                        <ComboBox Grid.Row="3" Grid.Column="1" x:Name="SoundErrorCombo"
+                                                  HorizontalAlignment="Stretch" SelectionChanged="OnFieldChanged" />
+                                        <Button Grid.Row="3" Grid.Column="2" x:Name="SoundErrorPreview"
+                                                Click="OnPlayError">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE768;" FontSize="11" />
+                                                <TextBlock x:Name="SoundErrorPreviewLabel" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <TextBlock Grid.Row="4" Grid.Column="0" x:Name="VolumeLabel"
+                                                   VerticalAlignment="Center" FontSize="13" />
+                                        <Slider Grid.Row="4" Grid.Column="1" x:Name="VolumeSlider"
+                                                Minimum="0" Maximum="100" StepFrequency="5"
+                                                ValueChanged="OnVolumeChanged" />
+                                        <TextBlock Grid.Row="4" Grid.Column="2" x:Name="VolumeValueLabel"
+                                                   VerticalAlignment="Center" Width="50"
+                                                   TextAlignment="Right"
+                                                   FontFamily="{StaticResource VAFontMono}" FontSize="12"
+                                                   Foreground="{ThemeResource VATextDimBrush}" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ========== System (kombiniert: App + Diagnose) ========== -->
+                            <Border x:Name="SystemCard" Style="{StaticResource VAGlassCard}" Padding="18"
+                                    Visibility="Collapsed">
+                                <StackPanel Spacing="18">
+                                    <Grid ColumnSpacing="14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="200" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" x:Name="UiLanguageLabel"
+                                                   VerticalAlignment="Center" FontSize="13" />
+                                        <ComboBox Grid.Column="1" x:Name="UiLanguageCombo"
+                                                  HorizontalAlignment="Stretch"
+                                                  SelectionChanged="OnUiLanguageChanged" />
+                                    </Grid>
+                                    <Grid ColumnSpacing="14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="200" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" x:Name="ThemeLabel"
+                                                   VerticalAlignment="Center" FontSize="13" />
+                                        <ComboBox Grid.Column="1" x:Name="ThemeCombo"
+                                                  HorizontalAlignment="Stretch"
+                                                  SelectionChanged="OnThemeChanged">
+                                            <ComboBoxItem Tag="dark" />
+                                            <ComboBoxItem Tag="light" />
+                                        </ComboBox>
+                                    </Grid>
+                                    <Grid ColumnSpacing="14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="200" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" x:Name="AutoStartLabel"
+                                                   VerticalAlignment="Center" FontSize="13" />
+                                        <ToggleSwitch Grid.Column="1" x:Name="AutoStartToggle"
+                                                      MinWidth="0" HorizontalAlignment="Left"
+                                                      OnContent="" OffContent=""
+                                                      Toggled="OnAutoStartToggle" />
+                                    </Grid>
+                                    <Grid ColumnSpacing="14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="200" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                            <TextBlock x:Name="HudEnabledLabel" FontSize="13" />
+                                            <TextBlock x:Name="HudEnabledSubtitle" FontSize="11"
+                                                       Foreground="{ThemeResource VATextMuteBrush}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                                            <ToggleSwitch x:Name="HudEnabledToggle" MinWidth="0"
+                                                          OnContent="" OffContent=""
+                                                          Toggled="OnFieldChanged" />
+                                            <ComboBox x:Name="HudPositionCombo" Width="180"
+                                                      SelectionChanged="OnFieldChanged">
+                                                <ComboBoxItem Tag="TopLeft" />
+                                                <ComboBoxItem Tag="TopCenter" />
+                                                <ComboBoxItem Tag="TopRight" />
+                                                <ComboBoxItem Tag="MiddleLeft" />
+                                                <ComboBoxItem Tag="MiddleCenter" />
+                                                <ComboBoxItem Tag="MiddleRight" />
+                                                <ComboBoxItem Tag="BottomLeft" />
+                                                <ComboBoxItem Tag="BottomCenter" />
+                                                <ComboBoxItem Tag="BottomRight" />
+                                            </ComboBox>
+                                            <Button x:Name="HudPreviewButton" Click="OnHudPreview" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <Grid ColumnSpacing="14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="200" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" x:Name="DiagnosticsLabel"
+                                                   VerticalAlignment="Center" FontSize="13" />
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                                            <Button x:Name="BtnOpenLog" Click="OnOpenLog" />
+                                            <Button x:Name="BtnTestServer" Click="OnTestServer" />
+                                            <Button x:Name="BtnCheckUpdates" Click="OnCheckUpdates" />
+                                            <Button x:Name="ApplyUpdateButton" Click="OnApplyUpdate"
+                                                    Visibility="Collapsed"
+                                                    Style="{StaticResource AccentButtonStyle}" />
+                                            <Button x:Name="BtnMinimize" Click="OnMinimizeToTray"
+                                                    Visibility="Collapsed" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <Border Background="{ThemeResource VABorderSoftBrush}"
+                                            CornerRadius="6" Padding="14,10">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xE73E;" FontSize="13"
+                                                          Foreground="{ThemeResource VAOkBrush}" />
+                                                <TextBlock x:Name="UpdateStatus" TextWrapping="Wrap"
+                                                           Style="{StaticResource VAMono}" FontSize="11"
+                                                           Foreground="{ThemeResource VATextDimBrush}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" x:Name="StatusText"
+                                                       Style="{StaticResource VAMono}" FontSize="11"
+                                                       Foreground="{ThemeResource VATextMuteBrush}"
+                                                       VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
-                    </Grid>
-                </ScrollViewer>
+                    </ScrollViewer>
+                </Grid>
             </Grid>
         </NavigationView>
     </Grid>
 </Window>
+

@@ -25,20 +25,38 @@ public sealed class SettingsStore
 
     public AppSettings Load()
     {
-        if (!File.Exists(FilePath)) return new AppSettings();
+        if (!File.Exists(FilePath))
+        {
+            Logger.Info($"Settings: no file at {FilePath}, using defaults");
+            return new AppSettings();
+        }
         try
         {
             var json = File.ReadAllText(FilePath);
-            return JsonSerializer.Deserialize<AppSettings>(json, JsonOpts) ?? new AppSettings();
+            var loaded = JsonSerializer.Deserialize<AppSettings>(json, JsonOpts);
+            if (loaded is null)
+            {
+                Logger.Warn($"Settings: deserialized to null, using defaults");
+                return new AppSettings();
+            }
+            return loaded;
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.Error($"Settings: load failed from {FilePath}", ex);
             return new AppSettings();
         }
     }
 
     public void Save(AppSettings s)
     {
-        File.WriteAllText(FilePath, JsonSerializer.Serialize(s, JsonOpts));
+        try
+        {
+            File.WriteAllText(FilePath, JsonSerializer.Serialize(s, JsonOpts));
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Settings: save failed to {FilePath}", ex);
+        }
     }
 }

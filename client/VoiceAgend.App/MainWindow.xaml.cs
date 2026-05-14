@@ -1,7 +1,9 @@
 using System.IO;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Input;
 using System.Windows.Input;
 using Windows.System;
@@ -21,12 +23,64 @@ public sealed partial class MainWindow : Window
 
     private bool _suppressAutoSave;
     private bool _quitting;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _recTimer;
+    private DateTime _recStartedAt = DateTime.MinValue;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _geometrySaveTimer;
 
     public MainWindow()
     {
         InitializeComponent();
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 1440));
         App.Current.Loc.LanguageChanged += () => DispatcherQueue.TryEnqueue(ApplyLocalization);
+        Themes.ThemeManager.Changed += () => DispatcherQueue.TryEnqueue(() =>
+        {
+            // Re-apply theme + Localization (manche Status-Pills nutzen Themes)
+            ApplyLocalization();
+        });
+
+        // Custom Title-Bar aktivieren
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(AppTitleBar);
+
+        // Window-Content beim ThemeManager registrieren, damit Light/Dark live umschaltet
+        if (Content is FrameworkElement root)
+            Themes.ThemeManager.RegisterRoot(root);
+
+        // Initial-Geometrie: gespeicherte Größe/Position oder DPI-skalierte Min-Größe
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        ApplyInitialGeometry(hwnd);
+
+        // Debounced Auto-Save bei Größen-/Positions-Änderungen
+        _geometrySaveTimer = DispatcherQueue.CreateTimer();
+        _geometrySaveTimer.Interval = TimeSpan.FromMilliseconds(400);
+        _geometrySaveTimer.Tick += (_, _) =>
+        {
+            _geometrySaveTimer!.Stop();
+            PersistWindowGeometry();
+        };
+
+        // Mindest-Fenstergröße erzwingen (WinUI 3 hat keine native MinSize).
+        // Wir vergleichen in EFFEKTIVEN px (DPI-normalisiert), damit die Min-Größe
+        // optisch auf jedem Monitor identisch wirkt — egal ob 100% oder 150% Scaling.
+        AppWindow.Changed += (sender, args) =>
+        {
+            if (!args.DidSizeChange && !args.DidPositionChange) return;
+            var (minWPx, minHPx) = ComputeMinSize(hwnd);
+
+            if (args.DidSizeChange)
+            {
+                var size = sender.Size;
+                if (size.Width < minWPx || size.Height < minHPx)
+                {
+                    sender.Resize(new Windows.Graphics.SizeInt32(
+                        Math.Max(minWPx, size.Width),
+                        Math.Max(minHPx, size.Height)));
+                    return; // Resize feuert wieder, das speichern wir dann
+                }
+            }
+            // Debounce: jeden Change verlängert den Timer
+            _geometrySaveTimer?.Stop();
+            _geometrySaveTimer?.Start();
+        };
         try { AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico")); }
         catch (Exception ex) { Logger.Warn("SetIcon: " + ex.Message); }
         Activated += (_, _) =>
@@ -44,9 +98,25 @@ public sealed partial class MainWindow : Window
                 HomeStatus.Text = s;
             });
         App.Current.Coordinator.StateChanged += () =>
-            DispatcherQueue.TryEnqueue(UpdateTrayState);
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                UpdateTrayState();
+                UpdateHeroState();
+            });
         App.Current.Coordinator.TranscriptReceived += t =>
-            DispatcherQueue.TryEnqueue(() => TranscriptBox.Text = t);
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                TranscriptBox.Text = t;
+                UpdateTranscriptStats();
+                RefreshHistory();
+            });
+        App.Current.History.Changed += () =>
+            DispatcherQueue.TryEnqueue(RefreshHistory);
+
+        // Timer für die "00:12"-Anzeige im Recording-State
+        _recTimer = DispatcherQueue.CreateTimer();
+        _recTimer.Interval = TimeSpan.FromSeconds(1);
+        _recTimer.Tick += (_, _) => UpdateHeroTimer();
         App.Current.Updates.StatusChanged += st =>
             DispatcherQueue.TryEnqueue(() => ShowUpdateStatus(st));
 
@@ -61,10 +131,15 @@ public sealed partial class MainWindow : Window
 
     private void LoadIntoUi()
     {
-        _suppressAutoSave = true;
+        // _suppressAutoSave wird vom Activated-Handler aufrechterhalten —
+        // hier NICHT auf false setzen, sonst feuern Initial-SelectionChanged-Events
+        // ein AutoSave, das die gerade gelesenen Settings mit halb-geladenen UI-Werten
+        // überschreibt (HUD/Sounds verschwinden bei jedem App-Neustart).
         HotkeyEnabledToggle.IsOn = App.Current.Settings.HotkeyEnabled;
-        _suppressAutoSave = false;
         ApplyLocalization();
+        UpdateHeroState();
+        RefreshHistory();
+        UpdateTranscriptStats();
 
         // Initial: Home-View aktiv
         if (Nav.SelectedItem == null)
@@ -99,7 +174,7 @@ public sealed partial class MainWindow : Window
         }
         if (OutputModeCombo.SelectedItem == null) OutputModeCombo.SelectedIndex = 0;
 
-        ToastCheck.IsChecked = s.ShowToastOnResult;
+        ToastToggle.IsOn = s.ShowToastOnResult;
 
         // Sound-Combos befüllen + Auswahl setzen
         InitSoundCombo(SoundStartCombo, s.SoundOnStart);
@@ -107,10 +182,11 @@ public sealed partial class MainWindow : Window
         InitSoundCombo(SoundDoneCombo, s.SoundOnDone);
         InitSoundCombo(SoundErrorCombo, s.SoundOnError);
         VolumeSlider.Value = s.SoundVolume;
-        VolumeLabel.Text = $"Lautstärke: {s.SoundVolume}%";
+        VolumeLabel.Text = App.Current.Loc.T("Settings.Volume");
+        VolumeValueLabel.Text = $"{s.SoundVolume}%";
 
-        AutoStartCheck.IsChecked = App.Current.AutoStart.IsEnabled;
-        HudEnabledCheck.IsChecked = s.HudEnabled;
+        AutoStartToggle.IsOn = App.Current.AutoStart.IsEnabled;
+        HudEnabledToggle.IsOn = s.HudEnabled;
         foreach (ComboBoxItem it in HudPositionCombo.Items)
         {
             if ((string)it.Tag == s.HudPosition.ToString())
@@ -130,7 +206,7 @@ public sealed partial class MainWindow : Window
 
     private void OnAutoStartToggle(object sender, RoutedEventArgs e)
     {
-        var enable = AutoStartCheck.IsChecked == true;
+        var enable = AutoStartToggle.IsOn;
         App.Current.AutoStart.SetEnabled(enable);
         StatusText.Text = App.Current.Loc.T(enable ? "Settings.AutoStart.Enabled" : "Settings.AutoStart.Disabled");
     }
@@ -143,6 +219,64 @@ public sealed partial class MainWindow : Window
         ProfileView.Visibility = tag == "profile" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = tag == "settings" ? Visibility.Visible : Visibility.Collapsed;
         if (tag == "profile") _ = LoadProfileAsync();
+        if (tag == "settings") ApplySettingsTab(_activeSettingsTab);
+    }
+
+    private string _activeSettingsTab = "connection";
+
+    private void OnSettingsNavClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string tag) ApplySettingsTab(tag);
+    }
+
+    private void ApplySettingsTab(string tab)
+    {
+        _activeSettingsTab = tab;
+        var L = App.Current.Loc;
+
+        ConnectionCard.Visibility = tab == "connection" ? Visibility.Visible : Visibility.Collapsed;
+        RecordingCard.Visibility = tab == "recording" ? Visibility.Visible : Visibility.Collapsed;
+        SoundsCard.Visibility = tab == "sounds" ? Visibility.Visible : Visibility.Collapsed;
+        SystemCard.Visibility = tab == "system" ? Visibility.Visible : Visibility.Collapsed;
+
+        // Aktive Highlights
+        HighlightNav(NavSettingsConnection, tab == "connection");
+        HighlightNav(NavSettingsRecording, tab == "recording");
+        HighlightNav(NavSettingsSounds, tab == "sounds");
+        HighlightNav(NavSettingsSystem, tab == "system");
+
+        // Card-Header (Titel + Subtitle)
+        SettingsTitle.Text = tab switch
+        {
+            "connection" => L.T("Settings.Card.Connection"),
+            "recording" => L.T("Settings.Card.Recording"),
+            "sounds" => L.T("Settings.Card.Sounds"),
+            "system" => L.T("Settings.Card.System"),
+            _ => "",
+        };
+        SettingsSubtitle.Text = tab switch
+        {
+            "connection" => L.T("Settings.Subtitle.Connection"),
+            "recording" => L.T("Settings.Subtitle.Recording"),
+            "sounds" => L.T("Settings.Subtitle.Sounds"),
+            "system" => L.T("Settings.Subtitle.System"),
+            _ => "",
+        };
+    }
+
+    private void HighlightNav(Button btn, bool active)
+    {
+        if (active)
+        {
+            btn.Background = (Brush)Application.Current.Resources["VASurfaceBrush"];
+            btn.BorderBrush = (Brush)Application.Current.Resources["VABorderSoftBrush"];
+            btn.BorderThickness = new Thickness(1);
+        }
+        else
+        {
+            btn.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            btn.BorderThickness = new Thickness(0);
+        }
     }
 
     private void OnTempChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
@@ -159,13 +293,13 @@ public sealed partial class MainWindow : Window
         var s = App.Current.Settings;
         if (string.IsNullOrWhiteSpace(s.ApiKey))
         {
-            ProfileStatus.Text = "Erst API-Key in Einstellungen setzen.";
+            ProfileStatus.Text = App.Current.Loc.T("Profile.NoApiKey");
             return;
         }
         try
         {
             var baseUrl = ServerApiClient.ToHttpBase(s.ServerUrl);
-            ProfileStatus.Text = "Lade…";
+            ProfileStatus.Text = App.Current.Loc.T("Profile.Loading");
 
             // Modell-Liste
             var models = await App.Current.ServerApi.ListModelsAsync(baseUrl, s.ApiKey);
@@ -192,8 +326,9 @@ public sealed partial class MainWindow : Window
             ServerTempLabel.Text = string.Format(App.Current.Loc.T("Profile.TempFmt"), p.Temperature);
 
             BuildCatalogList();
+            UpdateProfileStatCards(p);
 
-            ProfileStatus.Text = $"{models.Count} ✓";
+            ProfileStatus.Text = App.Current.Loc.T("Status.Online");
         }
         catch (Exception ex)
         {
@@ -211,57 +346,156 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private string _activeModelId = "";
+
+    private void UpdateProfileStatCards(ServerApiClient.Profile p)
+    {
+        var L = App.Current.Loc;
+        // Stat 1: Active model
+        var activeEntry = ModelCatalog.All.FirstOrDefault(e =>
+            string.Equals(e.Id, p.Model, StringComparison.OrdinalIgnoreCase));
+        StatActiveModelValue.Text = activeEntry?.ShortName
+            ?? (string.IsNullOrEmpty(p.Model) ? L.T("Profile.ModelDefault") : p.Model);
+        StatActiveModelTag.Text = activeEntry?.Tag ?? "";
+        _activeModelId = p.Model ?? "";
+
+        // Stat 2: Temperature
+        StatTempValue.Text = p.Temperature.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+        StatTempSub.Text = p.Temperature < 0.05 ? L.T("Profile.TempDeterministic") : L.T("Profile.TempVaried");
+
+        // Stat 3: Prompt word count
+        var promptWords = string.IsNullOrWhiteSpace(p.Prompt) ? 0
+            : p.Prompt.Split(new[] { ' ', ',', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+        StatPromptValue.Text = promptWords.ToString();
+        StatPromptSub.Text = L.T("Profile.PromptWordsBiased");
+
+        // Stat 4: API-Key
+        StatApiKeyValue.Text = $"#{p.ApiKeyId}";
+        StatApiKeyName.Text = p.ApiKeyName ?? "";
+    }
+
     private FrameworkElement BuildCatalogRow(ModelCatalog.Entry entry)
     {
         var L = App.Current.Loc;
         var installed = _installedModels.Contains(entry.Id);
+        var isActive = string.Equals(entry.Id, _activeModelId, StringComparison.OrdinalIgnoreCase);
 
-        var grid = new Grid { Margin = new Thickness(0, 6, 0, 6), ColumnSpacing = 12 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var accent = (Brush)Application.Current.Resources["VAAccentBrush"];
+        var borderSoft = (Brush)Application.Current.Resources["VABorderSoftBrush"];
+        var mute = (Brush)Application.Current.Resources["VATextMuteBrush"];
+        var dim = (Brush)Application.Current.Resources["VATextDimBrush"];
+        var text = (Brush)Application.Current.Resources["VATextBrush"];
+        var ok = (Brush)Application.Current.Resources["VAOkBrush"];
+        var warn = (Brush)Application.Current.Resources["VAWarnBrush"];
+        var monoFont = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["VAFontMono"];
+        var sansFont = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["VAFont"];
 
-        var info = new StackPanel { Spacing = 2 };
-        info.Children.Add(new TextBlock
+        var card = new Border
         {
-            Text = $"{entry.Label}  ·  {entry.SizeApprox}",
-            Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
-        });
-        info.Children.Add(new TextBlock
-        {
-            Text = entry.Hint, TextWrapping = TextWrapping.Wrap,
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-            FontSize = 12,
-        });
-        info.Children.Add(new TextBlock
-        {
-            Text = entry.Id, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-            FontSize = 11,
-        });
-        Grid.SetColumn(info, 0);
+            Padding = new Thickness(14),
+            CornerRadius = new CornerRadius(10),
+            BorderThickness = new Thickness(1),
+            BorderBrush = isActive ? accent : borderSoft,
+            Background = isActive
+                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x18, ((SolidColorBrush)accent).Color.R, ((SolidColorBrush)accent).Color.G, ((SolidColorBrush)accent).Color.B))
+                : (Brush)Application.Current.Resources["VABgRaisedBrush"],
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Top,
+        };
 
-        var actionPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        var stack = new StackPanel { Spacing = 4 };
+
+        // Name + (optional) AKTIV badge
+        var nameRow = new Grid();
+        nameRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        nameRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var nameTb = new TextBlock
+        {
+            Text = entry.ShortName, FontFamily = monoFont,
+            FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.Medium,
+            Foreground = isActive ? accent : text,
+        };
+        Grid.SetColumn(nameTb, 0);
+        nameRow.Children.Add(nameTb);
+        if (isActive)
+        {
+            var badge = new Border
+            {
+                BorderBrush = accent, BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4), Padding = new Thickness(6, 1, 6, 1),
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock
+                {
+                    Text = L.T("Profile.Active"),
+                    FontFamily = monoFont, FontSize = 9,
+                    Foreground = accent, CharacterSpacing = 60,
+                },
+            };
+            Grid.SetColumn(badge, 1);
+            nameRow.Children.Add(badge);
+        }
+        stack.Children.Add(nameRow);
+
+        stack.Children.Add(new TextBlock
+        {
+            Text = entry.Tag, FontFamily = monoFont, FontSize = 10.5,
+            Foreground = mute,
+        });
+
+        // Size + RTF
+        var metaRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 14, Margin = new Thickness(0, 8, 0, 0) };
+        metaRow.Children.Add(new TextBlock { Text = entry.SizeApprox, FontFamily = monoFont, FontSize = 11, Foreground = dim });
+        metaRow.Children.Add(new TextBlock { Text = $"RTF {entry.Rtf:F2}×", FontFamily = monoFont, FontSize = 11, Foreground = dim });
+        stack.Children.Add(metaRow);
+
+        // RTF progress-bar
+        var rtfTrack = new Border
+        {
+            Height = 3, CornerRadius = new CornerRadius(2),
+            Background = borderSoft, Margin = new Thickness(0, 6, 0, 0),
+        };
+        var fillWidth = Math.Min(100.0, entry.Rtf * 30 + 10) / 100.0;
+        var rtfFillContainer = new Grid();
+        rtfFillContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(fillWidth, GridUnitType.Star) });
+        rtfFillContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - fillWidth, GridUnitType.Star) });
+        var rtfFill = new Border
+        {
+            Background = entry.Rtf > 1.5 ? warn : (entry.Rtf > 0.8 ? accent : ok),
+            CornerRadius = new CornerRadius(2),
+        };
+        Grid.SetColumn(rtfFill, 0);
+        rtfFillContainer.Children.Add(rtfFill);
+        rtfTrack.Child = rtfFillContainer;
+        stack.Children.Add(rtfTrack);
+
+        // Action: installed pill or Install button
+        var actionRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
         if (installed)
         {
-            actionPanel.Children.Add(new TextBlock
+            actionRow.Children.Add(new FontIcon { Glyph = "", FontSize = 11, Foreground = ok });
+            actionRow.Children.Add(new TextBlock
             {
-                Text = L.T("Models.Installed"), VerticalAlignment = VerticalAlignment.Center,
-                Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.SeaGreen),
+                Text = L.T("Models.Installed"), FontFamily = monoFont,
+                FontSize = 11, Foreground = ok, VerticalAlignment = VerticalAlignment.Center,
             });
         }
         else
         {
-            var progress = new ProgressRing { IsActive = false, Width = 18, Height = 18 };
-            var btn = new Button { Content = L.T("Models.Btn.Install") };
+            var progress = new ProgressRing { IsActive = false, Width = 14, Height = 14 };
+            var btn = new Button
+            {
+                Content = L.T("Models.Btn.Install"),
+                Padding = new Thickness(10, 4, 10, 4),
+                FontSize = 11,
+            };
             btn.Click += async (_, _) => await InstallModelAsync(entry, btn, progress);
-            actionPanel.Children.Add(progress);
-            actionPanel.Children.Add(btn);
+            actionRow.Children.Add(progress);
+            actionRow.Children.Add(btn);
         }
-        Grid.SetColumn(actionPanel, 1);
+        stack.Children.Add(actionRow);
 
-        grid.Children.Add(info);
-        grid.Children.Add(actionPanel);
-        return grid;
+        card.Child = stack;
+        return card;
     }
 
     private async Task InstallModelAsync(ModelCatalog.Entry entry, Button btn, ProgressRing progress)
@@ -322,7 +556,7 @@ public sealed partial class MainWindow : Window
         var s = App.Current.Settings;
         if (string.IsNullOrWhiteSpace(s.ApiKey))
         {
-            ProfileStatus.Text = "Erst API-Key in Einstellungen setzen.";
+            ProfileStatus.Text = App.Current.Loc.T("Profile.NoApiKey");
             return;
         }
         try
@@ -371,6 +605,203 @@ public sealed partial class MainWindow : Window
         HomeStatus.Text = App.Current.Loc.T(enabled ? "Home.Hotkey.On" : "Home.Hotkey.Off");
     }
 
+    // ============================= HERO STATE =============================
+
+    private void UpdateHeroState()
+    {
+        var L = App.Current.Loc;
+        var recording = App.Current.Coordinator.IsRecording;
+        if (recording)
+        {
+            HeroDot.Fill = (Brush)Application.Current.Resources["VADangerBrush"];
+            HeroStateLabel.Text = L.T("Hero.Recording");
+            HeroStateLabel.Foreground = (Brush)Application.Current.Resources["VADangerBrush"];
+            HeroHeadline.Visibility = Visibility.Collapsed;
+            HeroTimer.Visibility = Visibility.Visible;
+            HeroHotkeyHintLabel.Text = L.T("Hero.HotkeyStop");
+            HotkeyKbd.Visibility = Visibility.Visible;
+            HotkeyKbdLabel.Text = App.Current.Settings.HotkeyDisplay();
+            HeroHotkeyTrailLabel.Text = "";
+            MicStopIcon.Visibility = Visibility.Visible;
+            MicIcon.Visibility = Visibility.Collapsed;
+            MicButtonGradient.GradientStops[0].Color = ThemeAccentColor();
+            MicButtonGradient.GradientStops[1].Color = Microsoft.UI.Colors.Black;
+            HeroWave.IsActive = true;
+            if (_recStartedAt == DateTime.MinValue) _recStartedAt = DateTime.Now;
+            _recTimer?.Start();
+            UpdateHeroTimer();
+        }
+        else
+        {
+            HeroDot.Fill = (Brush)Application.Current.Resources["VATextMuteBrush"];
+            HeroStateLabel.Text = L.T("Hero.Idle");
+            HeroStateLabel.Foreground = (Brush)Application.Current.Resources["VATextMuteBrush"];
+            HeroHeadline.Visibility = Visibility.Visible;
+            HeroHeadline.Text = L.T("Hero.StartHeadline");
+            HeroTimer.Visibility = Visibility.Collapsed;
+            HeroHotkeyHintLabel.Text = L.T("Hero.HotkeyHint");
+            HotkeyKbd.Visibility = Visibility.Visible;
+            HotkeyKbdLabel.Text = App.Current.Settings.HotkeyDisplay();
+            HeroHotkeyTrailLabel.Text = L.T("Hero.OrClick");
+            MicStopIcon.Visibility = Visibility.Collapsed;
+            MicIcon.Visibility = Visibility.Visible;
+            MicButtonGradient.GradientStops[0].Color = ((SolidColorBrush)Application.Current.Resources["VASurfaceHiBrush"]).Color;
+            MicButtonGradient.GradientStops[1].Color = ((SolidColorBrush)Application.Current.Resources["VABgBrush"]).Color;
+            HeroWave.IsActive = false;
+            _recStartedAt = DateTime.MinValue;
+            _recTimer?.Stop();
+        }
+        HeroMetaLabel.Text = BuildHeroMeta();
+        HeroWave.RefreshBrush();
+    }
+
+    private void UpdateHeroTimer()
+    {
+        if (_recStartedAt == DateTime.MinValue) return;
+        var s = (int)(DateTime.Now - _recStartedAt).TotalSeconds;
+        HeroTimer.Text = $"{s / 60:D2}:{s % 60:D2}";
+    }
+
+    private string BuildHeroMeta()
+    {
+        var s = App.Current.Settings;
+        var lang = string.IsNullOrWhiteSpace(s.Language)
+            ? App.Current.Loc.T("Settings.Lang.Auto")
+            : s.Language.ToUpperInvariant();
+        return $"· 16 kHz · {lang}";
+    }
+
+    private static Windows.UI.Color ThemeAccentColor() =>
+        ((SolidColorBrush)Application.Current.Resources["VAAccentBrush"]).Color;
+
+    // ============================= TRANSCRIPT STATS =============================
+
+    private void UpdateTranscriptStats()
+    {
+        var L = App.Current.Loc;
+        var text = TranscriptBox?.Text ?? "";
+        var words = string.IsNullOrWhiteSpace(text) ? 0
+            : text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+        TranscriptStatsWords.Text = string.Format(L.T("Home.Stats.WordsFmt"), words);
+        TranscriptStatsChars.Text = string.Format(L.T("Home.Stats.CharsFmt"), text.Length);
+    }
+
+    // ============================= HISTORY =============================
+
+    private void OnHistoryFilterChanged(object sender, TextChangedEventArgs e) => RefreshHistory();
+
+    private void RefreshHistory()
+    {
+        var L = App.Current.Loc;
+        var filter = HistoryFilter?.Text;
+        var items = App.Current.History.List(filter, 50);
+        HistoryCount.Text = string.Format(L.T("Home.History.CountFmt"), items.Count);
+        HistoryList.Items.Clear();
+        foreach (var entry in items)
+            HistoryList.Items.Add(BuildHistoryRow(entry));
+    }
+
+    private FrameworkElement BuildHistoryRow(HistoryService.Entry entry)
+    {
+        var grid = new Grid
+        {
+            Padding = new Thickness(11, 9, 11, 9),
+            CornerRadius = new CornerRadius(8),
+            Margin = new Thickness(0, 0, 0, 4),
+            BorderThickness = new Thickness(1),
+            BorderBrush = (Brush)Application.Current.Resources["VABorderSoftBrush"],
+        };
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        // Row 0: title + time
+        var topRow = new Grid();
+        topRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        topRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var title = new TextBlock
+        {
+            Text = entry.Title,
+            FontFamily = (FontFamily)Application.Current.Resources["VAFont"],
+            FontSize = 12,
+            Foreground = (Brush)Application.Current.Resources["VATextBrush"],
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            FontWeight = entry.Pinned ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
+        };
+        Grid.SetColumn(title, 0);
+        var time = new TextBlock
+        {
+            Text = entry.CreatedAt.ToString("HH:mm"),
+            FontFamily = (FontFamily)Application.Current.Resources["VAFontMono"],
+            FontSize = 9.5,
+            Foreground = (Brush)Application.Current.Resources["VATextMuteBrush"],
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(time, 1);
+        topRow.Children.Add(title);
+        topRow.Children.Add(time);
+
+        // Row 1: lang badge + duration + words
+        var meta = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(0, 4, 0, 0) };
+        if (!string.IsNullOrEmpty(entry.Language))
+        {
+            meta.Children.Add(new Border
+            {
+                BorderBrush = (Brush)Application.Current.Resources["VABorderSoftBrush"],
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(3),
+                Padding = new Thickness(4, 1, 4, 1),
+                Child = new TextBlock
+                {
+                    Text = entry.Language.ToUpperInvariant(),
+                    FontFamily = (FontFamily)Application.Current.Resources["VAFontMono"],
+                    FontSize = 9.5,
+                    Foreground = (Brush)Application.Current.Resources["VATextMuteBrush"],
+                },
+            });
+        }
+        if (entry.DurationMs > 0)
+        {
+            var s = entry.DurationMs / 1000;
+            meta.Children.Add(new TextBlock
+            {
+                Text = $"{s / 60:D1}:{s % 60:D2}",
+                FontFamily = (FontFamily)Application.Current.Resources["VAFontMono"],
+                FontSize = 9.5,
+                Foreground = (Brush)Application.Current.Resources["VATextMuteBrush"],
+            });
+            meta.Children.Add(new TextBlock
+            {
+                Text = "·",
+                FontFamily = (FontFamily)Application.Current.Resources["VAFontMono"],
+                FontSize = 9.5,
+                Foreground = (Brush)Application.Current.Resources["VATextMuteBrush"],
+            });
+        }
+        var wordCount = string.IsNullOrWhiteSpace(entry.Text)
+            ? 0
+            : entry.Text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+        meta.Children.Add(new TextBlock
+        {
+            Text = $"{wordCount}w",
+            FontFamily = (FontFamily)Application.Current.Resources["VAFontMono"],
+            FontSize = 9.5,
+            Foreground = (Brush)Application.Current.Resources["VATextMuteBrush"],
+        });
+        Grid.SetRow(meta, 1);
+
+        Grid.SetRow(topRow, 0);
+        grid.Children.Add(topRow);
+        grid.Children.Add(meta);
+
+        // Click → load into TranscriptBox
+        grid.Tapped += (_, _) =>
+        {
+            TranscriptBox.Text = entry.Text;
+            UpdateTranscriptStats();
+        };
+        return grid;
+    }
+
     private void AutoSave()
     {
         if (_suppressAutoSave) return;
@@ -389,7 +820,7 @@ public sealed partial class MainWindow : Window
             Enum.TryParse<OutputMode>(tag, out var mode))
             s.OutputMode = mode;
 
-        s.ShowToastOnResult = ToastCheck.IsChecked == true;
+        s.ShowToastOnResult = ToastToggle.IsOn;
 
         s.SoundOnStart = ReadSoundCombo(SoundStartCombo);
         s.SoundOnStop = ReadSoundCombo(SoundStopCombo);
@@ -397,14 +828,16 @@ public sealed partial class MainWindow : Window
         s.SoundOnError = ReadSoundCombo(SoundErrorCombo);
         s.SoundVolume = (int)VolumeSlider.Value;
 
-        s.HudEnabled = HudEnabledCheck.IsChecked == true;
+        s.HudEnabled = HudEnabledToggle.IsOn;
         if (HudPositionCombo.SelectedItem is ComboBoxItem hci && hci.Tag is string htag &&
             Enum.TryParse<HudPosition>(htag, out var hpos))
             s.HudPosition = hpos;
 
         App.Current.SaveSettings();
         App.Current.Hud?.ApplyPosition();
-        StatusText.Text = string.Format(App.Current.Loc.T("Status.SavedFmt"), DateTime.Now);
+        var msg = string.Format(App.Current.Loc.T("Status.SavedFmt"), DateTime.Now);
+        StatusText.Text = msg;
+        SettingsSavedIndicator.Text = msg;
     }
 
     private void OnFieldLostFocus(object sender, RoutedEventArgs e) => AutoSave();
@@ -445,7 +878,8 @@ public sealed partial class MainWindow : Window
 
     private void OnVolumeChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
-        VolumeLabel.Text = string.Format(App.Current.Loc.T("Settings.VolumeFmt"), (int)VolumeSlider.Value);
+        VolumeLabel.Text = App.Current.Loc.T("Settings.Volume");
+        VolumeValueLabel.Text = $"{(int)VolumeSlider.Value}%";
         AutoSave();
     }
 
@@ -585,10 +1019,22 @@ public sealed partial class MainWindow : Window
         App.Current.Loc.Load(code); // löst LanguageChanged → ApplyLocalization
     }
 
+    private void OnThemeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ThemeCombo.SelectedItem is not ComboBoxItem item) return;
+        var mode = (string)item.Tag;
+        if (App.Current.Settings.Theme == mode) return;
+        App.Current.Settings.Theme = mode;
+        App.Current.SaveSettings();
+        Themes.ThemeManager.Apply(mode);
+    }
+
     private void ApplyLocalization()
     {
         var L = App.Current.Loc;
         Title = L.T("Window.Title");
+        WindowTitleLabel.Text = L.T("Window.Title");
+        OnlinePillText.Text = L.T("Status.Online");
 
         // NavView
         ((NavigationViewItem)Nav.MenuItems[0]).Content = L.T("Nav.Transcript");
@@ -607,28 +1053,58 @@ public sealed partial class MainWindow : Window
         catch { }
 
         // ----- Home -----
-        HomeTitle.Text = L.T("Home.Title");
         TranscriptBox.PlaceholderText = L.T("Home.Placeholder");
-        BtnCopyTranscript.Content = L.T("Home.Btn.Copy");
-        BtnClearTranscript.Content = L.T("Home.Btn.Clear");
-        BtnHomeToggle.Content = L.T("Home.Btn.Toggle");
         HotkeyEnabledLabel.Text = L.T("Home.HotkeyEnabled");
+        TranscriptSectionLabel.Text = L.T("Home.Title");
+        HistoryLabel.Text = L.T("Home.History.Label");
+        HistoryFilter.PlaceholderText = L.T("Home.History.FilterPlaceholder");
+        PromptPreviewLabel.Text = L.T("Home.Prompt.Label");
+        if (string.IsNullOrWhiteSpace(PromptPreviewText.Text))
+            PromptPreviewText.Text = L.T("Home.Prompt.Empty");
+        UpdateHeroState();
+        UpdateTranscriptStats();
 
         // ----- Profile -----
+        ProfileSectionLabel.Text = L.T("Profile.Section");
         ProfileTitle.Text = L.T("Profile.Title");
-        ProfileDescription.Text = L.T("Profile.Description");
         ProfileLoadButton.Content = L.T("Profile.Btn.Reload");
         ProfileSaveButton.Content = L.T("Profile.Btn.Save");
+        StatActiveModelLabel.Text = L.T("Profile.Stat.ActiveModel");
+        StatTempLabel.Text = L.T("Profile.Stat.Temperature");
+        StatPromptLabel.Text = L.T("Profile.Stat.Prompt");
+        StatApiKeyLabel.Text = L.T("Profile.Stat.ApiKey");
         ProfileModelLabel.Text = L.T("Profile.Model");
         ProfilePromptLabel.Text = L.T("Profile.Prompt");
+        ProfilePromptHint.Text = L.T("Profile.Prompt.Hint");
         ServerPromptBox.PlaceholderText = L.T("Profile.Prompt.Placeholder");
         ProfileTempHint.Text = L.T("Profile.TempHint");
         ServerTempLabel.Text = string.Format(L.T("Profile.TempFmt"), ServerTempSlider.Value);
+        ModelsSectionLabel.Text = L.T("Models.Section");
         ModelsTitle.Text = L.T("Models.Title");
-        ModelsDescription.Text = L.T("Models.Description");
 
-        // ----- Settings -----
-        SettingsTitle.Text = L.T("Settings.Title");
+        // ----- Settings: vertikale Sub-Nav -----
+        SettingsSectionLabel.Text = L.T("Settings.Section");
+        NavSettingsConnectionLabel.Text = L.T("Settings.Card.Connection");
+        NavSettingsRecordingLabel.Text = L.T("Settings.Card.Recording");
+        NavSettingsSoundsLabel.Text = L.T("Settings.Card.Sounds");
+        NavSettingsSystemLabel.Text = L.T("Settings.Card.System");
+
+        // Sub-Beschriftungen für Karteninhalte
+        HotkeyHintLabel.Text = L.T("Settings.HotkeyHint");
+        ToastCheckLabel.Text = L.T("Settings.ToastOnResult");
+        AutoStartLabel.Text = L.T("Settings.AutoStart");
+        HudEnabledLabel.Text = L.T("Settings.HudShow");
+        HudEnabledSubtitle.Text = L.T("Settings.HudSubtitle");
+        DiagnosticsLabel.Text = L.T("Settings.Diagnostics");
+
+        // Sound-Probehören-Buttons
+        SoundStartPreviewLabel.Text = L.T("Settings.Sound.Preview");
+        SoundStopPreviewLabel.Text = L.T("Settings.Sound.Preview");
+        SoundDonePreviewLabel.Text = L.T("Settings.Sound.Preview");
+        SoundErrorPreviewLabel.Text = L.T("Settings.Sound.Preview");
+
+        // Aktiven Tab wiederherstellen
+        ApplySettingsTab(_activeSettingsTab);
         ServerUrlLabel.Text = L.T("Settings.ServerUrl");
         ServerUrlBox.PlaceholderText = "wss://va.example.com/ws/transcribe";
         ApiKeyLabel.Text = L.T("Settings.ApiKey");
@@ -649,19 +1125,14 @@ public sealed partial class MainWindow : Window
             ((ComboBoxItem)OutputModeCombo.Items[1]).Content = L.T("OutputMode.Type");
             ((ComboBoxItem)OutputModeCombo.Items[2]).Content = L.T("Settings.OutputMode.Notification");
         }
-        ToastCheck.Content = L.T("Settings.ToastOnResult");
 
         // ----- Sounds -----
-        SoundsTitle.Text = L.T("Settings.Sounds");
         SoundOnStartLabel.Text = L.T("Settings.Sound.OnStart");
         SoundOnStopLabel.Text = L.T("Settings.Sound.OnStop");
         SoundOnDoneLabel.Text = L.T("Settings.Sound.OnDone");
         SoundOnErrorLabel.Text = L.T("Settings.Sound.OnError");
-        SoundStartPreview.Content = L.T("Settings.Sound.Preview");
-        SoundStopPreview.Content = L.T("Settings.Sound.Preview");
-        SoundDonePreview.Content = L.T("Settings.Sound.Preview");
-        SoundErrorPreview.Content = L.T("Settings.Sound.Preview");
-        VolumeLabel.Text = string.Format(L.T("Settings.VolumeFmt"), (int)VolumeSlider.Value);
+        VolumeLabel.Text = L.T("Settings.Volume");
+        VolumeValueLabel.Text = $"{(int)VolumeSlider.Value}%";
 
         // Sound-Combos: Display-Strings für SoundChoice neu setzen
         RefreshSoundCombo(SoundStartCombo);
@@ -681,8 +1152,18 @@ public sealed partial class MainWindow : Window
         }
         UiLanguageLabel.Text = L.T("Settings.UiLanguage");
 
-        AutoStartCheck.Content = L.T("Settings.AutoStart");
-        HudEnabledCheck.Content = L.T("Settings.HudShow");
+        // ----- Theme-Picker -----
+        ThemeLabel.Text = L.T("Settings.Theme");
+        if (ThemeCombo.Items.Count >= 2)
+        {
+            ((ComboBoxItem)ThemeCombo.Items[0]).Content = L.T("Settings.Theme.Dark");
+            ((ComboBoxItem)ThemeCombo.Items[1]).Content = L.T("Settings.Theme.Light");
+        }
+        foreach (ComboBoxItem ci in ThemeCombo.Items)
+        {
+            if ((string)ci.Tag == App.Current.Settings.Theme) { ThemeCombo.SelectedItem = ci; break; }
+        }
+
         HudPreviewButton.Content = L.T("Settings.HudPreview");
 
         // HUD-Positions
@@ -751,6 +1232,51 @@ public sealed partial class MainWindow : Window
     private sealed record MicEntry(int Number, string Name)
     {
         public override string ToString() => Name;
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    private static (int w, int h) ComputeMinSize(IntPtr hwnd)
+    {
+        const int MinEffW = 960;
+        const int MinEffH = 900;
+        var dpi = GetDpiForWindow(hwnd);
+        var scale = dpi > 0 ? dpi / 96.0 : 1.0;
+        return ((int)Math.Round(MinEffW * scale), (int)Math.Round(MinEffH * scale));
+    }
+
+    private void ApplyInitialGeometry(IntPtr hwnd)
+    {
+        var s = App.Current.Settings;
+        var (minW, minH) = ComputeMinSize(hwnd);
+
+        int width = s.WindowWidth ?? minW;
+        int height = s.WindowHeight ?? minH;
+        if (width < minW) width = minW;
+        if (height < minH) height = minH;
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(width, height));
+
+        if (s.WindowX is int x && s.WindowY is int y)
+        {
+            try { AppWindow.Move(new Windows.Graphics.PointInt32(x, y)); }
+            catch { /* Off-Screen oder Monitor weg → Windows zentriert default */ }
+        }
+    }
+
+    private void PersistWindowGeometry()
+    {
+        if (_quitting) return;
+        try
+        {
+            var s = App.Current.Settings;
+            s.WindowWidth = AppWindow.Size.Width;
+            s.WindowHeight = AppWindow.Size.Height;
+            s.WindowX = AppWindow.Position.X;
+            s.WindowY = AppWindow.Position.Y;
+            App.Current.SettingsStore.Save(s);
+        }
+        catch (Exception ex) { Logger.Warn("PersistWindowGeometry: " + ex.Message); }
     }
 
     private sealed class RelayCommand : ICommand

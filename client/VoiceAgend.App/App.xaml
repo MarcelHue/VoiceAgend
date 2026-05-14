@@ -8,6 +8,80 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- Geist Sans (variable) -->
+            <FontFamily x:Key="VAFont">ms-appx:///Assets/Fonts/Geist-Variable.ttf#Geist</FontFamily>
+            <!-- Geist Mono (variable) -->
+            <FontFamily x:Key="VAFontMono">ms-appx:///Assets/Fonts/GeistMono-Variable.ttf#Geist Mono</FontFamily>
+
+            <!-- ============================ GLASS CARD ============================ -->
+            <Style x:Key="VAGlassCard" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource VAGlassBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource VABorderSoftBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="14" />
+            </Style>
+
+            <!-- ============================ SECTION LABEL ============================ -->
+            <Style x:Key="VASectionLabel" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource VAFontMono}" />
+                <Setter Property="FontSize" Value="10.5" />
+                <Setter Property="CharacterSpacing" Value="120" />
+                <Setter Property="Foreground" Value="{ThemeResource VATextMuteBrush}" />
+            </Style>
+
+            <!-- ============================ TITLE (page headline) ============================ -->
+            <Style x:Key="VAPageTitle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource VAFont}" />
+                <Setter Property="FontSize" Value="26" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="CharacterSpacing" Value="-30" />
+                <Setter Property="Foreground" Value="{ThemeResource VATextBrush}" />
+            </Style>
+
+            <Style x:Key="VAMono" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource VAFontMono}" />
+            </Style>
+
+            <ResourceDictionary.ThemeDictionaries>
+                <!-- ============================ DARK ============================ -->
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="VABgBrush" Color="#0c0d10" />
+                    <SolidColorBrush x:Key="VABgRaisedBrush" Color="#121419" />
+                    <SolidColorBrush x:Key="VASurfaceBrush" Color="#181a20" />
+                    <SolidColorBrush x:Key="VASurfaceHiBrush" Color="#1f2229" />
+                    <SolidColorBrush x:Key="VABorderBrush" Color="#262932" />
+                    <SolidColorBrush x:Key="VABorderSoftBrush" Color="#1d2027" />
+                    <SolidColorBrush x:Key="VATextBrush" Color="#e8e9ec" />
+                    <SolidColorBrush x:Key="VATextDimBrush" Color="#a4a8b2" />
+                    <SolidColorBrush x:Key="VATextMuteBrush" Color="#6e7280" />
+                    <SolidColorBrush x:Key="VAAccentBrush" Color="#22b5b0" />
+                    <SolidColorBrush x:Key="VAAccentDimBrush" Color="#1a8784" />
+                    <SolidColorBrush x:Key="VADangerBrush" Color="#e26a5b" />
+                    <SolidColorBrush x:Key="VAOkBrush" Color="#5cc89e" />
+                    <SolidColorBrush x:Key="VAWarnBrush" Color="#e9c468" />
+                    <SolidColorBrush x:Key="VAGlassBrush" Color="#8C181a20" />
+                </ResourceDictionary>
+
+                <!-- ============================ LIGHT ============================ -->
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="VABgBrush" Color="#f4f2ec" />
+                    <SolidColorBrush x:Key="VABgRaisedBrush" Color="#ffffff" />
+                    <SolidColorBrush x:Key="VASurfaceBrush" Color="#ffffff" />
+                    <SolidColorBrush x:Key="VASurfaceHiBrush" Color="#fbfaf6" />
+                    <SolidColorBrush x:Key="VABorderBrush" Color="#e2ddd2" />
+                    <SolidColorBrush x:Key="VABorderSoftBrush" Color="#ecebe4" />
+                    <SolidColorBrush x:Key="VATextBrush" Color="#15161a" />
+                    <SolidColorBrush x:Key="VATextDimBrush" Color="#54565d" />
+                    <SolidColorBrush x:Key="VATextMuteBrush" Color="#8b8c92" />
+                    <SolidColorBrush x:Key="VAAccentBrush" Color="#0f8a85" />
+                    <SolidColorBrush x:Key="VAAccentDimBrush" Color="#0c706b" />
+                    <SolidColorBrush x:Key="VADangerBrush" Color="#c8553d" />
+                    <SolidColorBrush x:Key="VAOkBrush" Color="#2f8f6a" />
+                    <SolidColorBrush x:Key="VAWarnBrush" Color="#b07c1a" />
+                    <SolidColorBrush x:Key="VAGlassBrush" Color="#B3ffffff" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

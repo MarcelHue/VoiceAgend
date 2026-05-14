@@ -27,43 +27,43 @@ public sealed class UpdateService
 
     public async Task<Status> CheckAsync()
     {
+        var L = App.Current.Loc;
         try
         {
             if (!IsConfigured)
-                return Set(new Status(GetCurrentVersion(), null, false, "Update-URL nicht konfiguriert (Dev-Build)."));
+                return Set(new Status(GetCurrentVersion(), null, false, L.T("Update.NotConfigured")));
             if (!Manager.IsInstalled)
-            {
-                return Set(new Status(GetCurrentVersion(), null, false, "Nicht über Installer installiert — Auto-Update deaktiviert."));
-            }
+                return Set(new Status(GetCurrentVersion(), null, false, L.T("Update.NotInstalled")));
             var info = await Manager.CheckForUpdatesAsync();
             if (info is null)
-                return Set(new Status(GetCurrentVersion(), null, false, "Du bist auf dem aktuellsten Stand."));
+                return Set(new Status(GetCurrentVersion(), null, false, L.T("Update.UpToDate")));
             return Set(new Status(GetCurrentVersion(), info.TargetFullRelease.Version.ToString(), true,
-                $"Update verfügbar: {info.TargetFullRelease.Version}"));
+                string.Format(L.T("Update.AvailableFmt"), info.TargetFullRelease.Version)));
         }
         catch (Exception ex)
         {
             Logger.Warn("Update check failed: " + ex.Message);
-            return Set(new Status(GetCurrentVersion(), null, false, $"Update-Check fehlgeschlagen: {ex.Message}"));
+            return Set(new Status(GetCurrentVersion(), null, false, string.Format(L.T("Update.CheckFailedFmt"), ex.Message)));
         }
     }
 
     public async Task ApplyAndRestartAsync()
     {
+        var L = App.Current.Loc;
         try
         {
             if (!Manager.IsInstalled) return;
             var info = await Manager.CheckForUpdatesAsync();
             if (info is null) return;
-            Set(new Status(GetCurrentVersion(), info.TargetFullRelease.Version.ToString(), true, "Lade Update…"));
+            Set(new Status(GetCurrentVersion(), info.TargetFullRelease.Version.ToString(), true, L.T("Update.Downloading")));
             await Manager.DownloadUpdatesAsync(info);
-            Set(new Status(GetCurrentVersion(), info.TargetFullRelease.Version.ToString(), true, "Wende Update an, App startet neu…"));
+            Set(new Status(GetCurrentVersion(), info.TargetFullRelease.Version.ToString(), true, L.T("Update.Applying")));
             Manager.ApplyUpdatesAndRestart(info);
         }
         catch (Exception ex)
         {
             Logger.Error("Update apply", ex);
-            Set(new Status(GetCurrentVersion(), null, false, $"Update fehlgeschlagen: {ex.Message}"));
+            Set(new Status(GetCurrentVersion(), null, false, string.Format(L.T("Update.FailedFmt"), ex.Message)));
         }
     }
 

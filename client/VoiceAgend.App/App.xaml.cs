@@ -20,6 +20,7 @@ public partial class App : Application
     public UpdateService Updates { get; } = new();
     public AutoStartService AutoStart { get; } = new();
     public LocalizationService Loc { get; } = new();
+    public HistoryService History { get; } = new();
     public RecordingCoordinator Coordinator { get; private set; } = null!;
 
     public MainWindow? MainWindow { get; private set; }
@@ -43,7 +44,9 @@ public partial class App : Application
 
         Settings = SettingsStore.Load();
         Loc.Load(Settings.UiLanguage);
+        Themes.ThemeManager.Apply(Settings.Theme);
         Coordinator = new RecordingCoordinator(Audio, Client, Output, Sounds, () => Settings);
+        Coordinator.TranscriptReceived += text => History.Add(text, Settings.Language, 0, 0);
 
         MainWindow = new MainWindow();
         Output.AttachUiThread(MainWindow.DispatcherQueue);

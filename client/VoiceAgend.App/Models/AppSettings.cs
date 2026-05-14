@@ -34,6 +34,15 @@ public sealed class AppSettings
     /// <summary>UI-Sprache (eigenständig von der Spracherkennungs-Sprache).</summary>
     public string UiLanguage { get; set; } = "de";
 
+    /// <summary>Theme-Modus: "dark" oder "light".</summary>
+    public string Theme { get; set; } = "dark";
+
+    // Persistierte Fenster-Geometrie (physische Pixel; null = noch nie gesetzt)
+    public int? WindowWidth { get; set; }
+    public int? WindowHeight { get; set; }
+    public int? WindowX { get; set; }
+    public int? WindowY { get; set; }
+
     /// <summary>WaveIn-Device-Number; -1 = Windows-Default.</summary>
     public int MicDeviceNumber { get; set; } = -1;
     public string MicDeviceName { get; set; } = "Standard";

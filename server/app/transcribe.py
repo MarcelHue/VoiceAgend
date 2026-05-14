@@ -22,19 +22,9 @@ def _similar(a: str, b: str, threshold: float = 0.92) -> bool:
 
 
 def _dedupe_repetitions(text: str, min_repeat: int = 3) -> str:
-    """
-    Collapses runs of identical or near-identical consecutive sentences that
-    typically come from Whisper hallucinations at silence boundaries.
-
-    Example input:  "A. B. B. B. B. B. B."
-    Example output: "A. B."
-
-    A legitimate intentional double ("Nein. Nein.") is preserved — only runs
-    of `min_repeat` or more identical sentences are reduced.
-    """
+    """Collapse runs of identical consecutive sentences (Whisper repetition hallucinations)."""
     if not text or not text.strip():
         return text
-    # Split by sentence-ending punctuation, preserving the marker
     parts = re.split(r"(?<=[.!?…])\s+", text.strip())
     if len(parts) < min_repeat:
         return text
@@ -48,13 +38,57 @@ def _dedupe_repetitions(text: str, min_repeat: int = 3) -> str:
             j += 1
         run = j - i
         if run >= min_repeat:
-            out.append(current)  # keep one
+            out.append(current)
             i = j
         else:
-            # Keep all instances (could be intentional <min_repeat repetition)
             out.extend(parts[i:j])
             i = j
     return " ".join(out)
+
+
+# Bekannte Phrasen, die Whisper bei Stille/Musik halluziniert.
+# In Lowercase, werden case-insensitive am Ende des Texts geprüft.
+_HALLUCINATION_TRAILS = (
+    "vielen dank fürs zuschauen",
+    "vielen dank für's zuschauen",
+    "danke fürs zuschauen",
+    "danke für's zuschauen",
+    "tschüss",
+    "bis zum nächsten mal",
+    "untertitelung des zdf",
+    "untertitel im auftrag",
+    "untertitel der amara.org-community",
+    "thanks for watching",
+    "thank you for watching",
+    "see you next time",
+    "see you in the next video",
+    "please subscribe",
+    "subtitles by the amara.org community",
+)
+
+
+def _strip_hallucination_trails(text: str) -> str:
+    """Schneidet bekannte Halluzinations-Phrasen am Ende des Texts ab."""
+    if not text:
+        return text
+    stripped = text.rstrip()
+    lower = stripped.lower()
+    # Wiederhole, solange am Ende eine bekannte Phrase steht (entfernt Mehrfach-Ketten)
+    changed = True
+    while changed:
+        changed = False
+        for phrase in _HALLUCINATION_TRAILS:
+            # Phrase kann mit . / ! / ? enden oder ohne — wir erlauben optional Satzendezeichen
+            for suffix in ("", ".", "!", "?", "…", ". ", "! ", "? "):
+                target = phrase + suffix
+                if lower.endswith(target):
+                    stripped = stripped[: -len(target)].rstrip(" .,;:!?…\n\r")
+                    lower = stripped.lower()
+                    changed = True
+                    break
+            if changed:
+                break
+    return stripped
 
 
 class TranscriptionError(Exception):
@@ -103,6 +137,9 @@ class TranscriptionService:
         data: dict[str, str] = {
             "model": model or settings.whisper_model,
             "response_format": "json",
+            # Speaches-Extension: schneidet stille Passagen vorab raus,
+            # eine der häufigsten Quellen für Whisper-Halluzinationen.
+            "vad_filter": "true",
         }
         lang = language or settings.default_language
         if lang:
@@ -120,6 +157,7 @@ class TranscriptionService:
         body = r.json()
         text = body.get("text", "").strip()
         text = _dedupe_repetitions(text)
+        text = _strip_hallucination_trails(text)
         detected_lang = body.get("language") or lang
         return text, detected_lang
 

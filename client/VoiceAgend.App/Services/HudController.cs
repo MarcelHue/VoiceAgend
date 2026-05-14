@@ -42,12 +42,22 @@ public sealed class HudController
     {
         // Mappt freie Status-Strings auf HUD-States.
         var lower = status.ToLowerInvariant();
-        if (lower.Contains("aufnahme")) Show(HudState.Recording, status);
-        else if (lower.Contains("sende") || lower.Contains("verbinde")) Show(HudState.Sending, status);
-        else if (lower.Contains("warte") || lower.Contains("verarbeit")) Show(HudState.Processing, status);
-        else if (lower.Contains("fertig")) Show(HudState.Done, status);
-        else if (lower.Contains("fehler") || lower.Contains("mic-fehler")) Show(HudState.Error, status);
-        else if (lower.Contains("kurz")) Show(HudState.Error, status);
+        if (lower.Contains("aufnahme läuft") || lower.Contains("recording…")
+            || lower == "aufnahme läuft…" || lower == "recording")
+            Show(HudState.Recording, status);
+        else if (lower.Contains("warte") || lower.Contains("verarbeit") || lower.Contains("transkrip")
+                 || lower.Contains("waiting") || lower.Contains("transcrip"))
+            Show(HudState.Processing, status);
+        else if (lower.Contains("sende") || lower.Contains("verbinde")
+                 || lower.Contains("sending") || lower.Contains("connecting"))
+            Show(HudState.Sending, status);
+        else if (lower.Contains("fertig") || lower.Contains("done"))
+            Show(HudState.Done, status);
+        else if (lower.Contains("kurz") || lower.Contains("verworfen")
+                 || lower.Contains("too short") || lower.Contains("discarded"))
+            Show(HudState.Error, status);
+        else if (lower.Contains("fehler") || lower.Contains("error"))
+            Show(HudState.Error, status);
         // sonst: ignorieren (z. B. "Gespeichert" aus dem Settings-Fenster)
     }
 }

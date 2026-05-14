@@ -28,6 +28,9 @@ services:
       WHISPER__INFERENCE_DEVICE: cpu
       WHISPER__CPU_THREADS: "6"
       WHISPER__NUM_WORKERS: "1"
+      # Anti-Halluzination: nicht auf vorherige Segmente konditionieren —
+      # verhindert Wiederholungs-Kaskaden bei Stille/leiser Sprache.
+      WHISPER__CONDITION_ON_PREVIOUS_TEXT: "false"
       ENABLE_UI: "true"
       LOG_LEVEL: info
       # Optional: API-Key-Schutz aktivieren (sonst offen für jeden im LAN)
