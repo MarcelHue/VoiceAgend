@@ -75,11 +75,16 @@ public partial class App : Application
                 _ = ShowUpdateToastAsync(s.AvailableVersion ?? "");
         };
 
-        // Stiller Update-Check beim Start (3 s warten, damit UI nicht blockt)
+        // Update-Check: 3 s nach Start, danach alle 30 Minuten
         _ = Task.Run(async () =>
         {
-            await Task.Delay(3000);
-            await Updates.CheckAsync();
+            await Task.Delay(TimeSpan.FromSeconds(3));
+            while (true)
+            {
+                try { await Updates.CheckAsync(); }
+                catch (Exception ex) { Logger.Warn("Periodic update check: " + ex.Message); }
+                await Task.Delay(TimeSpan.FromMinutes(30));
+            }
         });
     }
 
