@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.Windows.AppNotifications;
 using VoiceAgend.App.Models;
 using VoiceAgend.App.Services;
 
@@ -59,6 +60,21 @@ public partial class App : Application
         MainWindow.Activate();
         Logger.Info($"Hotkey registered: {Settings.HotkeyDisplay()}");
 
+        // Toast-Activation registrieren (Windows ruft uns zurück, wenn Buttons im Toast geklickt werden)
+        try
+        {
+            AppNotificationManager.Default.NotificationInvoked += OnNotificationInvoked;
+            AppNotificationManager.Default.Register();
+        }
+        catch (Exception ex) { Logger.Warn("NotificationManager register: " + ex.Message); }
+
+        // Bei jedem Update-Check: wenn Update verfügbar, prominent als Toast anzeigen
+        Updates.StatusChanged += s =>
+        {
+            if (s.IsUpdateAvailable)
+                _ = ShowUpdateToastAsync(s.AvailableVersion ?? "");
+        };
+
         // Stiller Update-Check beim Start (3 s warten, damit UI nicht blockt)
         _ = Task.Run(async () =>
         {
@@ -82,5 +98,61 @@ public partial class App : Application
     {
         try { await Coordinator.ToggleAsync(); }
         catch (Exception ex) { CrashHandler.Handle("Hotkey-Pressed", ex); }
+    }
+
+    private bool _toastShownForVersion;
+    private string? _lastToastVersion;
+
+    private Task ShowUpdateToastAsync(string version)
+    {
+        // Pro Version nur einmal pro App-Lauf toasten
+        if (_lastToastVersion == version) return Task.CompletedTask;
+        _lastToastVersion = version;
+
+        try
+        {
+            var L = Loc;
+            var titleKey = L.T("Update.Toast.Title");
+            var bodyKey = string.Format(L.T("Update.Toast.BodyFmt"), version);
+            var installBtn = L.T("Btn.InstallUpdate");
+            var showBtn = L.T("Tray.ShowWindow");
+
+            var n = new Microsoft.Windows.AppNotifications.Builder.AppNotificationBuilder()
+                .AddText(titleKey)
+                .AddText(bodyKey)
+                .AddButton(new Microsoft.Windows.AppNotifications.Builder.AppNotificationButton(installBtn)
+                    .AddArgument("action", "install"))
+                .AddButton(new Microsoft.Windows.AppNotifications.Builder.AppNotificationButton(showBtn)
+                    .AddArgument("action", "show"))
+                .SetTag("update")
+                .BuildNotification();
+            // Default-Klick auf den Toast-Body öffnet das Fenster:
+            n.Tag = "update";
+            // Set top-level argument so plain body click also has an action
+            AppNotificationManager.Default.Show(n);
+            _toastShownForVersion = true;
+        }
+        catch (Exception ex) { Logger.Warn("Update toast: " + ex.Message); }
+        return Task.CompletedTask;
+    }
+
+    private void OnNotificationInvoked(AppNotificationManager sender, AppNotificationActivatedEventArgs args)
+    {
+        try
+        {
+            args.Arguments.TryGetValue("action", out var action);
+            if (string.IsNullOrEmpty(action)) action = "show";
+
+            var dq = MainWindow?.DispatcherQueue;
+            dq?.TryEnqueue(async () =>
+            {
+                MainWindow?.Activate();
+                if (action == "install")
+                {
+                    await Updates.ApplyAndRestartAsync();
+                }
+            });
+        }
+        catch (Exception ex) { Logger.Error("Notification invoked", ex); }
     }
 }

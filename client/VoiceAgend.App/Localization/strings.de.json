@@ -112,5 +112,8 @@
   "Status.SavedFmt": "Gespeichert ({0:HH:mm:ss}).",
 
   "Toast.TranscriptCopied": "Transkript in Zwischenablage",
-  "Toast.Transcript": "Transkript"
+  "Toast.Transcript": "Transkript",
+
+  "Update.Toast.Title": "VoiceAgend Update verfügbar",
+  "Update.Toast.BodyFmt": "Version {0} ist bereit zur Installation."
 }
