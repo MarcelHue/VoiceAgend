@@ -18,6 +18,9 @@
   "Home.Status.Empty": "Nothing to copy.",
   "Home.Status.CopiedFmt": "Copied ({0} chars).",
   "Home.Status.Cleared": "Cleared.",
+  "Home.HotkeyEnabled": "Hotkey active",
+  "Home.Hotkey.On": "Hotkey enabled — recording via shortcut is available.",
+  "Home.Hotkey.Off": "Hotkey disabled — recording only via UI/tray.",
 
   "Settings.Title": "Settings",
   "Settings.ServerUrl": "Server URL",

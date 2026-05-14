@@ -61,6 +61,9 @@ public sealed partial class MainWindow : Window
 
     private void LoadIntoUi()
     {
+        _suppressAutoSave = true;
+        HotkeyEnabledToggle.IsOn = App.Current.Settings.HotkeyEnabled;
+        _suppressAutoSave = false;
         ApplyLocalization();
 
         // Initial: Home-View aktiv
@@ -359,6 +362,15 @@ public sealed partial class MainWindow : Window
         HomeStatus.Text = App.Current.Loc.T("Home.Status.Cleared");
     }
 
+    private void OnHotkeyEnabledToggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressAutoSave) return;
+        var enabled = HotkeyEnabledToggle.IsOn;
+        App.Current.Settings.HotkeyEnabled = enabled;
+        App.Current.SaveSettings(); // ApplyHotkey wird darin aufgerufen
+        HomeStatus.Text = App.Current.Loc.T(enabled ? "Home.Hotkey.On" : "Home.Hotkey.Off");
+    }
+
     private void AutoSave()
     {
         if (_suppressAutoSave) return;
@@ -600,6 +612,7 @@ public sealed partial class MainWindow : Window
         BtnCopyTranscript.Content = L.T("Home.Btn.Copy");
         BtnClearTranscript.Content = L.T("Home.Btn.Clear");
         BtnHomeToggle.Content = L.T("Home.Btn.Toggle");
+        HotkeyEnabledLabel.Text = L.T("Home.HotkeyEnabled");
 
         // ----- Profile -----
         ProfileTitle.Text = L.T("Profile.Title");

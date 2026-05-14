@@ -18,6 +18,9 @@
   "Home.Status.Empty": "Kein Text zum Kopieren.",
   "Home.Status.CopiedFmt": "Kopiert ({0} Zeichen).",
   "Home.Status.Cleared": "Geleert.",
+  "Home.HotkeyEnabled": "Hotkey aktiv",
+  "Home.Hotkey.On": "Hotkey aktiviert — Aufnahme per Tastenkombination möglich.",
+  "Home.Hotkey.Off": "Hotkey deaktiviert — Aufnahme nur noch über UI/Tray.",
 
   "Settings.Title": "Einstellungen",
   "Settings.ServerUrl": "Server-URL",

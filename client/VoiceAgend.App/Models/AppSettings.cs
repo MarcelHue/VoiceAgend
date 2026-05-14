@@ -42,6 +42,8 @@ public sealed class AppSettings
     public uint HotkeyModifiers { get; set; } = 2 | 4; // Ctrl+Shift
     /// <summary>Hotkey-Virtual-Key-Code (z. B. 'R' = 0x52).</summary>
     public uint HotkeyVirtualKey { get; set; } = 0x52; // R
+    /// <summary>Master-Schalter: ist der globale Hotkey aktiv?</summary>
+    public bool HotkeyEnabled { get; set; } = true;
 
     public OutputMode OutputMode { get; set; } = OutputMode.Clipboard;
     public bool ShowToastOnResult { get; set; } = true;

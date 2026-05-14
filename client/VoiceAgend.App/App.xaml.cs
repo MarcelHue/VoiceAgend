@@ -85,7 +85,10 @@ public partial class App : Application
 
     public void ApplyHotkey()
     {
-        Hotkey.Register(Settings.HotkeyModifiers, Settings.HotkeyVirtualKey);
+        if (Settings.HotkeyEnabled)
+            Hotkey.Register(Settings.HotkeyModifiers, Settings.HotkeyVirtualKey);
+        else
+            Hotkey.Unregister();
     }
 
     public void SaveSettings()
