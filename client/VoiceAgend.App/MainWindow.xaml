@@ -135,35 +135,14 @@
                             </Button>
 
                             <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
-                                <!-- Status badge + hotkey hint -->
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                        <Ellipse x:Name="HeroDot" Width="6" Height="6"
-                                                 Fill="{ThemeResource VATextMuteBrush}" />
-                                        <TextBlock x:Name="HeroStateLabel"
-                                                   Style="{StaticResource VASectionLabel}"
-                                                   Foreground="{ThemeResource VATextMuteBrush}" />
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                        <TextBlock x:Name="HeroHotkeyHintLabel"
-                                                   Style="{StaticResource VASectionLabel}" />
-                                        <Border x:Name="HotkeyKbd"
-                                                BorderBrush="{ThemeResource VABorderSoftBrush}"
-                                                BorderThickness="1" CornerRadius="4"
-                                                Padding="6,1">
-                                            <TextBlock x:Name="HotkeyKbdLabel"
-                                                       Style="{StaticResource VAMono}" FontSize="11"
-                                                       Foreground="{ThemeResource VATextDimBrush}" />
-                                        </Border>
-                                        <TextBlock x:Name="HeroHotkeyTrailLabel"
-                                                   Style="{StaticResource VASectionLabel}" />
-                                    </StackPanel>
-                                </Grid>
+                                <!-- Status badge: nur Dot + State-Label, links -->
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Ellipse x:Name="HeroDot" Width="6" Height="6"
+                                             Fill="{ThemeResource VATextMuteBrush}" />
+                                    <TextBlock x:Name="HeroStateLabel"
+                                               Style="{StaticResource VASectionLabel}"
+                                               Foreground="{ThemeResource VATextMuteBrush}" />
+                                </StackPanel>
 
                                 <!-- Headline (timer when recording, "Aufnahme starten" when idle) -->
                                 <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Bottom">
@@ -186,14 +165,70 @@
                                 <views:LiveWaveform x:Name="HeroWave" Height="44" Margin="0,8,0,0" />
                             </StackPanel>
 
-                            <!-- Hotkey toggle, top right -->
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10"
-                                        VerticalAlignment="Top">
-                                <TextBlock x:Name="HotkeyEnabledLabel" VerticalAlignment="Center"
-                                           Foreground="{ThemeResource VATextMuteBrush}" FontSize="11" />
-                                <ToggleSwitch x:Name="HotkeyEnabledToggle"
-                                              Toggled="OnHotkeyEnabledToggled" MinWidth="0"
-                                              OnContent="" OffContent="" />
+                            <!-- Hotkey-Hinweis + Toggle + Combos, alle rechtsbündig -->
+                            <StackPanel Grid.Column="2" Spacing="4" VerticalAlignment="Top">
+                                <StackPanel Orientation="Horizontal" Spacing="8"
+                                            HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <TextBlock x:Name="HeroHotkeyHintLabel"
+                                               Style="{StaticResource VASectionLabel}"
+                                               VerticalAlignment="Center" />
+                                    <Border x:Name="HotkeyKbd"
+                                            BorderBrush="{ThemeResource VABorderSoftBrush}"
+                                            BorderThickness="1" CornerRadius="4" VerticalAlignment="Center">
+                                        <TextBlock x:Name="HotkeyKbdLabel"
+                                                   Style="{StaticResource VAMono}" FontSize="11"
+                                                   Foreground="{ThemeResource VATextDimBrush}" />
+                                    </Border>
+                                    <TextBlock x:Name="HeroHotkeyTrailLabel"
+                                               Style="{StaticResource VASectionLabel}"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="10"
+                                            HorizontalAlignment="Right">
+                                    <TextBlock x:Name="HotkeyEnabledLabel" VerticalAlignment="Center"
+                                               Foreground="{ThemeResource VATextMuteBrush}" FontSize="11" />
+                                    <ToggleSwitch x:Name="HotkeyEnabledToggle"
+                                                  Toggled="OnHotkeyEnabledToggled" MinWidth="0"
+                                                  OnContent="" OffContent="" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="10"
+                                            HorizontalAlignment="Right">
+                                    <TextBlock x:Name="HomeLanguageLabel" VerticalAlignment="Center"
+                                               Foreground="{ThemeResource VATextMuteBrush}" FontSize="11" />
+                                    <ComboBox x:Name="HomeLanguageCombo" MinWidth="140"
+                                              SelectionChanged="OnHomeLanguageChanged">
+                                        <ComboBoxItem Tag="" />
+                                        <ComboBoxItem Tag="de" />
+                                        <ComboBoxItem Tag="en" />
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="10"
+                                            HorizontalAlignment="Right">
+                                    <TextBlock x:Name="HomeOutputModeLabel" VerticalAlignment="Center"
+                                               Foreground="{ThemeResource VATextMuteBrush}" FontSize="11" />
+                                    <ComboBox x:Name="HomeOutputModeCombo" MinWidth="200"
+                                              SelectionChanged="OnHomeOutputModeChanged">
+                                        <ComboBoxItem Tag="Clipboard" />
+                                        <ComboBoxItem Tag="Paste" />
+                                        <ComboBoxItem Tag="DirectInsert" />
+                                        <ComboBoxItem Tag="Type" />
+                                        <ComboBoxItem Tag="Notification" />
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel x:Name="HomeTypingSpeedPanel"
+                                            Orientation="Horizontal" Spacing="10"
+                                            HorizontalAlignment="Right" Visibility="Collapsed">
+                                    <TextBlock x:Name="HomeTypingSpeedLabel" VerticalAlignment="Center"
+                                               Foreground="{ThemeResource VATextMuteBrush}" FontSize="11" />
+                                    <Slider x:Name="HomeTypingSpeedSlider" Width="140"
+                                            ValueChanged="OnHomeTypingSpeedChanged"
+                                            VerticalAlignment="Center" />
+                                    <TextBlock x:Name="HomeTypingSpeedValueLabel"
+                                               VerticalAlignment="Center" Width="60"
+                                               TextAlignment="Right"
+                                               FontFamily="{StaticResource VAFontMono}" FontSize="11"
+                                               Foreground="{ThemeResource VATextDimBrush}" />
+                                </StackPanel>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -606,6 +641,9 @@
                                                 <ComboBoxItem Tag="de" />
                                                 <ComboBoxItem Tag="en" />
                                             </ComboBox>
+                                            <TextBlock x:Name="LanguageAutoHint" FontSize="11"
+                                                       Foreground="{ThemeResource VATextMuteBrush}"
+                                                       TextWrapping="Wrap" />
                                         </StackPanel>
                                     </Grid>
                                     <StackPanel Spacing="5">
@@ -646,9 +684,31 @@
                                         <ComboBox x:Name="OutputModeCombo" HorizontalAlignment="Stretch"
                                                   SelectionChanged="OnFieldChanged">
                                             <ComboBoxItem Tag="Clipboard" />
+                                            <ComboBoxItem Tag="Paste" />
+                                            <ComboBoxItem Tag="DirectInsert" />
                                             <ComboBoxItem Tag="Type" />
                                             <ComboBoxItem Tag="Notification" />
                                         </ComboBox>
+                                    </StackPanel>
+                                    <StackPanel x:Name="TypingSpeedPanel" Spacing="5" Visibility="Collapsed">
+                                        <TextBlock x:Name="TypingSpeedLabel" FontSize="13"
+                                                   Foreground="{ThemeResource VATextBrush}" FontWeight="SemiBold" />
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Slider Grid.Column="0" x:Name="TypingSpeedSlider"
+                                                    ValueChanged="OnTypingSpeedChanged" />
+                                            <TextBlock Grid.Column="1" x:Name="TypingSpeedValueLabel"
+                                                       VerticalAlignment="Center" Width="80"
+                                                       TextAlignment="Right"
+                                                       FontFamily="{StaticResource VAFontMono}" FontSize="12"
+                                                       Foreground="{ThemeResource VATextDimBrush}" />
+                                        </Grid>
+                                        <TextBlock x:Name="TypingSpeedHint" FontSize="11"
+                                                   Foreground="{ThemeResource VATextMuteBrush}"
+                                                   TextWrapping="Wrap" />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="14">
                                         <TextBlock x:Name="ToastCheckLabel" VerticalAlignment="Center"

@@ -37,6 +37,7 @@
     <PackageReference Include="Concentus.OggFile" Version="1.0.4" />
     <PackageReference Include="Velopack" Version="0.0.1053" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
+    <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>

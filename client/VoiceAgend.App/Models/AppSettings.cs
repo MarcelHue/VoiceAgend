@@ -4,6 +4,8 @@ public enum OutputMode
 {
     Clipboard,
     Type,
+    Paste,
+    DirectInsert,
     Notification,
 }
 
@@ -55,6 +57,9 @@ public sealed class AppSettings
     public bool HotkeyEnabled { get; set; } = true;
 
     public OutputMode OutputMode { get; set; } = OutputMode.Clipboard;
+
+    /// <summary>Tipp-Geschwindigkeit in Zeichen pro Sekunde (für Type/Smart-Fallback).</summary>
+    public int TypingSpeedCps { get; set; } = 400;
     public bool ShowToastOnResult { get; set; } = true;
 
     // Sound pro Event + globale Lautstärke

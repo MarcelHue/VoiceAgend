@@ -96,7 +96,14 @@ public sealed class RecordingCoordinator
             TranscriptReceived?.Invoke(result.Text);
             _output.Dispatch(s.OutputMode, result.Text, s.ShowToastOnResult);
             _sound.Play(s.SoundOnDone, s.SoundVolume);
-            StatusChanged?.Invoke(string.Format(Loc().T("Status.DoneFmt"), result.ProcessingMs));
+
+            // Status mit erkannter Sprache anzeigen — wichtig bei Auto-Modus,
+            // damit der User sofort sieht ob Whisper richtig oder falsch detected hat.
+            var langTag = string.IsNullOrWhiteSpace(result.Language) ? "" : result.Language.ToUpperInvariant();
+            var msg = string.IsNullOrEmpty(langTag)
+                ? string.Format(Loc().T("Status.DoneFmt"), result.ProcessingMs)
+                : string.Format(Loc().T("Status.DoneWithLangFmt"), result.ProcessingMs, langTag);
+            StatusChanged?.Invoke(msg);
         }
         catch (Exception ex)
         {

@@ -136,6 +136,8 @@ public sealed partial class MainWindow : Window
         // ein AutoSave, das die gerade gelesenen Settings mit halb-geladenen UI-Werten
         // überschreibt (HUD/Sounds verschwinden bei jedem App-Neustart).
         HotkeyEnabledToggle.IsOn = App.Current.Settings.HotkeyEnabled;
+        SetComboByTag(HomeLanguageCombo, App.Current.Settings.Language ?? "");
+        SetComboByTag(HomeOutputModeCombo, App.Current.Settings.OutputMode.ToString());
         ApplyLocalization();
         UpdateHeroState();
         RefreshHistory();
@@ -173,6 +175,12 @@ public sealed partial class MainWindow : Window
             }
         }
         if (OutputModeCombo.SelectedItem == null) OutputModeCombo.SelectedIndex = 0;
+
+        var cps = Math.Clamp(s.TypingSpeedCps, 30, 2000);
+        ConfigureTypingSpeedSlider(TypingSpeedSlider, cps);
+        ConfigureTypingSpeedSlider(HomeTypingSpeedSlider, cps);
+        UpdateTypingSpeedValueLabels(cps);
+        UpdateTypingSpeedVisibility();
 
         ToastToggle.IsOn = s.ShowToastOnResult;
 
@@ -808,7 +816,16 @@ public sealed partial class MainWindow : Window
         var s = App.Current.Settings;
         s.ServerUrl = ServerUrlBox.Text.Trim();
         s.ApiKey = ApiKeyBox.Password.Trim();
-        s.Language = ReadLanguageSelection();
+        var newLang = ReadLanguageSelection();
+        if (s.Language != newLang)
+        {
+            s.Language = newLang;
+            // Home-Combo synchronisieren ohne Loop
+            var prev = _suppressAutoSave;
+            _suppressAutoSave = true;
+            try { SetComboByTag(HomeLanguageCombo, newLang); }
+            finally { _suppressAutoSave = prev; }
+        }
 
         if (MicCombo.SelectedItem is MicEntry mic)
         {
@@ -818,7 +835,17 @@ public sealed partial class MainWindow : Window
 
         if (OutputModeCombo.SelectedItem is ComboBoxItem ci && ci.Tag is string tag &&
             Enum.TryParse<OutputMode>(tag, out var mode))
-            s.OutputMode = mode;
+        {
+            if (s.OutputMode != mode)
+            {
+                s.OutputMode = mode;
+                var prev = _suppressAutoSave;
+                _suppressAutoSave = true;
+                try { SetComboByTag(HomeOutputModeCombo, tag); }
+                finally { _suppressAutoSave = prev; }
+                UpdateTypingSpeedVisibility();
+            }
+        }
 
         s.ShowToastOnResult = ToastToggle.IsOn;
 
@@ -845,19 +872,100 @@ public sealed partial class MainWindow : Window
 
     private void SetLanguageSelection(string lang)
     {
-        foreach (ComboBoxItem item in LanguageCombo.Items)
+        SetComboByTag(LanguageCombo, lang ?? "");
+        SetComboByTag(HomeLanguageCombo, lang ?? "");
+    }
+
+    private static void SetComboByTag(ComboBox combo, string tag)
+    {
+        foreach (ComboBoxItem item in combo.Items)
         {
-            if ((string)item.Tag == (lang ?? ""))
-            {
-                LanguageCombo.SelectedItem = item;
-                return;
-            }
+            if ((string)item.Tag == tag) { combo.SelectedItem = item; return; }
         }
-        LanguageCombo.SelectedIndex = 0;
+        if (combo.Items.Count > 0) combo.SelectedIndex = 0;
     }
 
     private string ReadLanguageSelection() =>
         LanguageCombo.SelectedItem is ComboBoxItem ci ? (string)ci.Tag : "";
+
+    private void OnHomeLanguageChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressAutoSave) return;
+        if (HomeLanguageCombo.SelectedItem is not ComboBoxItem ci) return;
+        var newLang = (string)ci.Tag;
+        if (App.Current.Settings.Language == newLang) return;
+        App.Current.Settings.Language = newLang;
+        _suppressAutoSave = true;
+        try { SetComboByTag(LanguageCombo, newLang); }
+        finally { _suppressAutoSave = false; }
+        App.Current.SaveSettings();
+        UpdateHeroState();
+    }
+
+    private void OnHomeOutputModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressAutoSave) return;
+        if (HomeOutputModeCombo.SelectedItem is not ComboBoxItem ci) return;
+        if (ci.Tag is not string tag) return;
+        if (!Enum.TryParse<OutputMode>(tag, out var mode)) return;
+        if (App.Current.Settings.OutputMode == mode) return;
+        App.Current.Settings.OutputMode = mode;
+        _suppressAutoSave = true;
+        try { SetComboByTag(OutputModeCombo, tag); }
+        finally { _suppressAutoSave = false; }
+        App.Current.SaveSettings();
+        UpdateTypingSpeedVisibility();
+    }
+
+    private void OnTypingSpeedChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (_suppressAutoSave) return;
+        var cps = (int)TypingSpeedSlider.Value;
+        App.Current.Settings.TypingSpeedCps = cps;
+        _suppressAutoSave = true;
+        try { HomeTypingSpeedSlider.Value = cps; }
+        finally { _suppressAutoSave = false; }
+        UpdateTypingSpeedValueLabels(cps);
+        App.Current.SaveSettings();
+    }
+
+    private void OnHomeTypingSpeedChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (_suppressAutoSave) return;
+        var cps = (int)HomeTypingSpeedSlider.Value;
+        App.Current.Settings.TypingSpeedCps = cps;
+        _suppressAutoSave = true;
+        try { TypingSpeedSlider.Value = cps; }
+        finally { _suppressAutoSave = false; }
+        UpdateTypingSpeedValueLabels(cps);
+        App.Current.SaveSettings();
+    }
+
+    private static void ConfigureTypingSpeedSlider(Slider slider, int initialValue)
+    {
+        // Order matters: Maximum first so Value can sit above 100 default;
+        // Value before Minimum so Minimum's coercion does not fight with Value.
+        slider.Maximum = 2000;
+        slider.Value = initialValue;
+        slider.Minimum = 30;
+        slider.StepFrequency = 10;
+    }
+
+    private void UpdateTypingSpeedValueLabels(int cps)
+    {
+        var text = string.Format(App.Current.Loc.T("Settings.TypingSpeedFmt"), cps);
+        TypingSpeedValueLabel.Text = text;
+        HomeTypingSpeedValueLabel.Text = text;
+    }
+
+    private void UpdateTypingSpeedVisibility()
+    {
+        var mode = App.Current.Settings.OutputMode;
+        var visible = mode == OutputMode.Type || mode == OutputMode.DirectInsert;
+        var v = visible ? Visibility.Visible : Visibility.Collapsed;
+        TypingSpeedPanel.Visibility = v;
+        HomeTypingSpeedPanel.Visibility = v;
+    }
 
     private static void InitSoundCombo(ComboBox combo, SoundChoice selected)
     {
@@ -1055,6 +1163,22 @@ public sealed partial class MainWindow : Window
         // ----- Home -----
         TranscriptBox.PlaceholderText = L.T("Home.Placeholder");
         HotkeyEnabledLabel.Text = L.T("Home.HotkeyEnabled");
+        HomeLanguageLabel.Text = L.T("Home.SpeechLanguage");
+        if (HomeLanguageCombo.Items.Count >= 3)
+        {
+            ((ComboBoxItem)HomeLanguageCombo.Items[0]).Content = L.T("Settings.Lang.Auto");
+            ((ComboBoxItem)HomeLanguageCombo.Items[1]).Content = L.T("Settings.Lang.De");
+            ((ComboBoxItem)HomeLanguageCombo.Items[2]).Content = L.T("Settings.Lang.En");
+        }
+        HomeOutputModeLabel.Text = L.T("Home.OutputMode");
+        if (HomeOutputModeCombo.Items.Count >= 5)
+        {
+            ((ComboBoxItem)HomeOutputModeCombo.Items[0]).Content = L.T("OutputMode.Clipboard");
+            ((ComboBoxItem)HomeOutputModeCombo.Items[1]).Content = L.T("OutputMode.Paste");
+            ((ComboBoxItem)HomeOutputModeCombo.Items[2]).Content = L.T("OutputMode.DirectInsert");
+            ((ComboBoxItem)HomeOutputModeCombo.Items[3]).Content = L.T("OutputMode.Type");
+            ((ComboBoxItem)HomeOutputModeCombo.Items[4]).Content = L.T("Settings.OutputMode.Notification");
+        }
         TranscriptSectionLabel.Text = L.T("Home.Title");
         HistoryLabel.Text = L.T("Home.History.Label");
         HistoryFilter.PlaceholderText = L.T("Home.History.FilterPlaceholder");
@@ -1115,16 +1239,23 @@ public sealed partial class MainWindow : Window
             ((ComboBoxItem)LanguageCombo.Items[1]).Content = L.T("Settings.Lang.De");
             ((ComboBoxItem)LanguageCombo.Items[2]).Content = L.T("Settings.Lang.En");
         }
+        LanguageAutoHint.Text = L.T("Settings.Lang.AutoHint");
         MicLabel.Text = L.T("Settings.Mic");
         HotkeyLabel.Text = L.T("Settings.Hotkey");
         HotkeyButton.Content = L.T("Settings.Hotkey.Record");
         OutputModeLabel.Text = L.T("Settings.OutputMode");
-        if (OutputModeCombo.Items.Count >= 3)
+        if (OutputModeCombo.Items.Count >= 5)
         {
             ((ComboBoxItem)OutputModeCombo.Items[0]).Content = L.T("OutputMode.Clipboard");
-            ((ComboBoxItem)OutputModeCombo.Items[1]).Content = L.T("OutputMode.Type");
-            ((ComboBoxItem)OutputModeCombo.Items[2]).Content = L.T("Settings.OutputMode.Notification");
+            ((ComboBoxItem)OutputModeCombo.Items[1]).Content = L.T("OutputMode.Paste");
+            ((ComboBoxItem)OutputModeCombo.Items[2]).Content = L.T("OutputMode.DirectInsert");
+            ((ComboBoxItem)OutputModeCombo.Items[3]).Content = L.T("OutputMode.Type");
+            ((ComboBoxItem)OutputModeCombo.Items[4]).Content = L.T("Settings.OutputMode.Notification");
         }
+        TypingSpeedLabel.Text = L.T("Settings.TypingSpeed");
+        TypingSpeedHint.Text = L.T("Settings.TypingSpeed.Hint");
+        HomeTypingSpeedLabel.Text = L.T("Home.TypingSpeed");
+        UpdateTypingSpeedValueLabels((int)TypingSpeedSlider.Value);
 
         // ----- Sounds -----
         SoundOnStartLabel.Text = L.T("Settings.Sound.OnStart");

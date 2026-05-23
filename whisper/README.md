@@ -16,7 +16,9 @@ other OpenAI-API-compatible client.
    sudo chown -R 1000:1000 /mnt/<pool>/Applications/speaches/cache
    ```
 
-3. **Apps → Discover → Custom App** and paste [`docker-compose.truenas.yml`](docker-compose.truenas.yml).
+3. **Apps → Discover → Custom App** and paste the YAML matching your hardware:
+   - [`docker-compose.cpu.truenas.yml`](docker-compose.cpu.truenas.yml) — CPU only (no NVIDIA GPU, or older Pascal that isn't supported by the open driver in TrueNAS 25.10+).
+   - [`docker-compose.cuda.truenas.yml`](docker-compose.cuda.truenas.yml) — NVIDIA GPU (Turing / RTX 20xx and newer). Requires NVIDIA drivers enabled in TrueNAS apps settings; verify with `sudo docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi`.
 
 4. **Application name:** `speaches`. **Install**.
 
@@ -81,7 +83,9 @@ anderen OpenAI-API-kompatiblen Clients verwendet werden kann.
    sudo chown -R 1000:1000 /mnt/<pool>/Applications/speaches/cache
    ```
 
-3. **Apps → Discover Apps → Custom App** → Inhalt von [`docker-compose.truenas.yml`](docker-compose.truenas.yml) einfügen.
+3. **Apps → Discover Apps → Custom App** → YAML passend zur Hardware einfügen:
+   - [`docker-compose.cpu.truenas.yml`](docker-compose.cpu.truenas.yml) — nur CPU (keine NVIDIA-GPU oder ältere Pascal-Karten, die vom Open-Treiber in TrueNAS 25.10+ nicht unterstützt werden).
+   - [`docker-compose.cuda.truenas.yml`](docker-compose.cuda.truenas.yml) — NVIDIA-GPU (Turing / RTX 20xx oder neuer). Voraussetzung: NVIDIA-Treiber in den TrueNAS-App-Settings aktiviert; testen mit `sudo docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi`.
 
 4. **Application Name:** `speaches`. **Install** klicken.
 

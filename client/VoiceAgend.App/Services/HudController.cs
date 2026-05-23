@@ -41,23 +41,49 @@ public sealed class HudController
     public void OnStatus(string status)
     {
         // Mappt freie Status-Strings auf HUD-States.
+        // WICHTIG: Reihenfolge zählt — "Leeres Transkript" enthält "transkrip",
+        // darum muss "Discarded/Error" VOR "Processing" geprüft werden.
         var lower = status.ToLowerInvariant();
-        if (lower.Contains("aufnahme läuft") || lower.Contains("recording…")
-            || lower == "aufnahme läuft…" || lower == "recording")
-            Show(HudState.Recording, status);
-        else if (lower.Contains("warte") || lower.Contains("verarbeit") || lower.Contains("transkrip")
-                 || lower.Contains("waiting") || lower.Contains("transcrip"))
-            Show(HudState.Processing, status);
-        else if (lower.Contains("sende") || lower.Contains("verbinde")
-                 || lower.Contains("sending") || lower.Contains("connecting"))
-            Show(HudState.Sending, status);
-        else if (lower.Contains("fertig") || lower.Contains("done"))
+
+        // 1) Discarded / Empty (terminal, HUD blendet aus)
+        if (lower.Contains("kurz") || lower.Contains("verworfen") || lower.Contains("leer")
+            || lower.Contains("too short") || lower.Contains("discarded") || lower.Contains("empty"))
+        {
+            Show(HudState.Error, status);
+            return;
+        }
+        // 2) Fehler (terminal)
+        if (lower.Contains("fehler") || lower.Contains("error") || lower.Contains("failed"))
+        {
+            Show(HudState.Error, status);
+            return;
+        }
+        // 3) Fertig (terminal)
+        if (lower.Contains("fertig") || lower.Contains("done"))
+        {
             Show(HudState.Done, status);
-        else if (lower.Contains("kurz") || lower.Contains("verworfen")
-                 || lower.Contains("too short") || lower.Contains("discarded"))
-            Show(HudState.Error, status);
-        else if (lower.Contains("fehler") || lower.Contains("error"))
-            Show(HudState.Error, status);
+            return;
+        }
+        // 4) Recording
+        if (lower.Contains("aufnahme läuft") || lower.Contains("recording"))
+        {
+            Show(HudState.Recording, status);
+            return;
+        }
+        // 5) Sending
+        if (lower.Contains("sende") || lower.Contains("verbinde")
+            || lower.Contains("sending") || lower.Contains("connecting"))
+        {
+            Show(HudState.Sending, status);
+            return;
+        }
+        // 6) Processing / Transkription (zuletzt, weil "transkrip" auch in "Leeres Transkript" steckt)
+        if (lower.Contains("warte") || lower.Contains("verarbeit") || lower.Contains("transkrip")
+            || lower.Contains("waiting") || lower.Contains("transcrib"))
+        {
+            Show(HudState.Processing, status);
+            return;
+        }
         // sonst: ignorieren (z. B. "Gespeichert" aus dem Settings-Fenster)
     }
 }

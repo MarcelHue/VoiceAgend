@@ -1,0 +1,46 @@
+# TrueNAS Custom App: Speaches (CUDA/GPU-Variante)
+#
+# Voraussetzungen:
+#   - NVIDIA-GPU mit Turing (RTX 20xx) oder neuer — der in TrueNAS 25.10+ mitgelieferte
+#     Open-Treiber unterstützt nur Karten mit GSP-Firmware. Pascal (1080 etc.) ist OUT.
+#   - TrueNAS UI → Apps → Configuration → Settings → "Install NVIDIA Drivers" aktiv
+#   - GPU NICHT unter "System Settings → Advanced → Isolated GPU Device IDs"
+#   - Test vor Install: `sudo docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi`
+#
+# Datasets identisch zur CPU-Variante:
+#   HDDs/Applications/speaches/{cache, config}, Owner 1000:1000
+
+services:
+  speaches:
+    image: ghcr.io/speaches-ai/speaches:latest-cuda
+    container_name: speaches
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - /mnt/HDDs/Applications/speaches/cache:/home/ubuntu/.cache/huggingface
+      - /mnt/HDDs/Applications/speaches/config:/config
+    environment:
+      # Empfehlung pro VRAM:
+      #   ≥6 GB  → large-v3 mit float16  (~5 GB VRAM, höchste Qualität, ~5–8× Echtzeit)
+      #   ≥4 GB  → medium mit float16    (~3 GB VRAM, sehr schnell, ~15× Echtzeit)
+      #   ≤4 GB  → small/medium mit int8_float16 (~1.5–2 GB VRAM)
+      WHISPER__MODEL: Systran/faster-whisper-large-v3
+      WHISPER__COMPUTE_TYPE: float16
+      WHISPER__INFERENCE_DEVICE: cuda
+      WHISPER__NUM_WORKERS: "1"
+      # Anti-Halluzination: nicht auf vorherige Segmente konditionieren
+      WHISPER__CONDITION_ON_PREVIOUS_TEXT: "false"
+      ENABLE_UI: "true"
+      LOG_LEVEL: info
+      # Optional: API-Key-Schutz aktivieren (sonst offen für jeden im LAN)
+      # API_KEY: ein-langes-zufallsgeheimnis
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 8G

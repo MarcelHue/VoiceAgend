@@ -1,35 +1,32 @@
-# TrueNAS Custom App: Speaches (OpenAI-kompatibler Whisper-Server, CPU)
+# TrueNAS Custom App: Speaches (CPU-Variante)
+#
+# Wenn keine NVIDIA-GPU vorhanden ist — oder nur Pascal/ältere ohne GSP-Support,
+# die der in TrueNAS 25.10+ ausgelieferte Open-Treiber nicht ansprechen kann.
 #
 # Datasets vorher anlegen (TrueNAS UI):
 #   HDDs/Applications/speaches/cache         (Modelle, ~3-6 GB pro Modell)
 #   HDDs/Applications/speaches/config        (optionale Config-Dateien)
-#   Owner/Group: apps:apps (UID/GID 568) per ACL-Preset "Apps"
-#
-# Hardware-Profil: AMD Ryzen 5 3600 (6C/12T), 32 GB RAM, mind. 8 GB frei.
-# Reserviert: 8 GB RAM, max 6 Threads für Whisper.
+#   Owner/Group: 1000:1000 (Speaches läuft als ubuntu, UID 1000)
 
 services:
   speaches:
     image: ghcr.io/speaches-ai/speaches:latest-cpu
     container_name: speaches
     restart: unless-stopped
-    # Speaches-Image läuft fest als UID 1000 (ubuntu), eigene Python-Installation
-    # ist nur für 1000 lesbar. Datasets müssen daher mit 1000:1000 geownt sein.
     ports:
       - "8001:8000"
     volumes:
       - /mnt/HDDs/Applications/speaches/cache:/home/ubuntu/.cache/huggingface
       - /mnt/HDDs/Applications/speaches/config:/config
     environment:
-      # Standardmodell, das beim ersten Request geladen und im Speicher gehalten wird.
-      # Für deine CPU ist 'medium' der gute Kompromiss; 'small' ~2x schneller.
+      # Auf CPU: medium ist der gute Kompromiss (~1× Echtzeit auf 6-Kerner).
+      # small (~500 MB) ist 2× schneller, large-v3 (~3 GB) 3× langsamer als Echtzeit.
       WHISPER__MODEL: Systran/faster-whisper-medium
       WHISPER__COMPUTE_TYPE: int8
       WHISPER__INFERENCE_DEVICE: cpu
       WHISPER__CPU_THREADS: "6"
       WHISPER__NUM_WORKERS: "1"
-      # Anti-Halluzination: nicht auf vorherige Segmente konditionieren —
-      # verhindert Wiederholungs-Kaskaden bei Stille/leiser Sprache.
+      # Anti-Halluzination: nicht auf vorherige Segmente konditionieren
       WHISPER__CONDITION_ON_PREVIOUS_TEXT: "false"
       ENABLE_UI: "true"
       LOG_LEVEL: info
