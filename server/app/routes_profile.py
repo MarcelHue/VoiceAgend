@@ -1,4 +1,5 @@
 from typing import Annotated
+from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -53,17 +54,45 @@ async def install_model(
     _: Annotated[tuple[ApiKey, User], Depends(require_api_key)],
 ):
     """Triggert den Download eines Modells im Speaches-Backend.
-    Modelle können mehrere GB groß sein — Timeout ist großzügig (10 min)."""
+    Modelle können mehrere GB groß sein — Timeout ist großzügig (10 min).
+
+    Speaches' POST-Route deklariert {model_id} NICHT als :path-Parameter,
+    daher müssen wir den Slash url-encoden — sonst routet FastAPI auf der
+    Speaches-Seite ins Leere (404)."""
+    encoded = quote(model_id, safe="")
     headers = _whisper_headers()
+    base = settings.whisper_url.rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=600.0, headers=headers) as c:
-            r = await c.post(f"{settings.whisper_url.rstrip('/')}/v1/models/{model_id}")
+            r = await c.post(f"{base}/v1/models/{encoded}")
             if r.status_code >= 400:
                 raise HTTPException(
                     status_code=502,
                     detail=f"speaches HTTP {r.status_code}: {r.text[:300]}",
                 )
             return {"status": "installed", "model": model_id}
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"whisper backend unreachable: {e}")
+
+
+@router.delete("/models/{model_id:path}", status_code=200)
+async def uninstall_model(
+    model_id: str,
+    _: Annotated[tuple[ApiKey, User], Depends(require_api_key)],
+):
+    """Löscht ein installiertes Modell aus dem Speaches-Cache."""
+    encoded = quote(model_id, safe="")
+    headers = _whisper_headers()
+    base = settings.whisper_url.rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=60.0, headers=headers) as c:
+            r = await c.delete(f"{base}/v1/models/{encoded}")
+            if r.status_code >= 400:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"speaches HTTP {r.status_code}: {r.text[:300]}",
+                )
+            return {"status": "uninstalled", "model": model_id}
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"whisper backend unreachable: {e}")
 

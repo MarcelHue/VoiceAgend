@@ -16,6 +16,7 @@ public partial class App : Application
     public OutputService Output { get; } = new();
     public SoundService Sounds { get; } = new();
     public ServerApiClient ServerApi { get; } = new();
+    public HuggingFaceSearchClient HfSearch { get; } = new();
     public HotkeyManager Hotkey { get; } = new();
     public UpdateService Updates { get; } = new();
     public AutoStartService AutoStart { get; } = new();

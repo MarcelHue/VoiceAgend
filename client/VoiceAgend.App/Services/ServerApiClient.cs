@@ -53,6 +53,20 @@ public sealed class ServerApiClient
         }
     }
 
+    public async Task UninstallModelAsync(
+        string baseUrl, string apiKey, string modelId,
+        CancellationToken ct = default)
+    {
+        using var http = Build(baseUrl, apiKey);
+        http.Timeout = TimeSpan.FromMinutes(1);
+        var r = await http.DeleteAsync($"/api/v1/models/{modelId}", ct);
+        if (!r.IsSuccessStatusCode)
+        {
+            var body = await r.Content.ReadAsStringAsync(ct);
+            throw new InvalidOperationException($"HTTP {(int)r.StatusCode}: {body}");
+        }
+    }
+
     public async Task<Profile> UpdateProfileAsync(
         string baseUrl, string apiKey,
         string? model, string? prompt, double? temperature,

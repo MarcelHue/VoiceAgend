@@ -26,6 +26,8 @@ public sealed partial class MainWindow : Window
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _recTimer;
     private DateTime _recStartedAt = DateTime.MinValue;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _geometrySaveTimer;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _hfSearchDebounce;
+    private CancellationTokenSource? _hfSearchCts;
 
     public MainWindow()
     {
@@ -336,6 +338,10 @@ public sealed partial class MainWindow : Window
             BuildCatalogList();
             UpdateProfileStatCards(p);
 
+            // Beim ersten Profil-Load: Top-Whisper-Modelle von HF anzeigen (leerer Query = Top-Liste)
+            if (HfSearchResults.Items.Count == 0)
+                _ = RunHfSearchAsync(HfSearchBox.Text ?? "");
+
             ProfileStatus.Text = App.Current.Loc.T("Status.Online");
         }
         catch (Exception ex)
@@ -486,6 +492,22 @@ public sealed partial class MainWindow : Window
                 Text = L.T("Models.Installed"), FontFamily = monoFont,
                 FontSize = 11, Foreground = ok, VerticalAlignment = VerticalAlignment.Center,
             });
+            // Uninstall-Button — nicht für das gerade aktive Modell anbieten
+            if (!isActive)
+            {
+                var delBtn = new Button
+                {
+                    Padding = new Thickness(6, 4, 6, 4),
+                    FontSize = 11,
+                    Margin = new Thickness(8, 0, 0, 0),
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                    BorderThickness = new Thickness(0),
+                    Content = new FontIcon { Glyph = "", FontSize = 13, Foreground = mute },
+                };
+                ToolTipService.SetToolTip(delBtn, L.T("Models.Btn.Uninstall"));
+                delBtn.Click += async (_, _) => await UninstallModelAsync(entry, delBtn);
+                actionRow.Children.Add(delBtn);
+            }
         }
         else
         {
@@ -558,6 +580,233 @@ public sealed partial class MainWindow : Window
             ProfileStatus.Text = string.Format(L.T("Models.ErrorFmt"), ex.Message);
         }
     }
+
+    private async Task UninstallModelAsync(ModelCatalog.Entry entry, Button btn)
+    {
+        var s = App.Current.Settings;
+        if (string.IsNullOrWhiteSpace(s.ApiKey)) return;
+        var L = App.Current.Loc;
+
+        // Confirm-Dialog — Modelle sind groß und Re-Download dauert
+        var dlg = new ContentDialog
+        {
+            XamlRoot = this.Content.XamlRoot,
+            Title = L.T("Models.Confirm.UninstallTitle"),
+            Content = string.Format(L.T("Models.Confirm.UninstallBodyFmt"), entry.Label, entry.SizeApprox),
+            PrimaryButtonText = L.T("Models.Btn.Uninstall"),
+            CloseButtonText = L.T("Models.Btn.Cancel"),
+            DefaultButton = ContentDialogButton.Close,
+        };
+        var result = await dlg.ShowAsync();
+        if (result != ContentDialogResult.Primary) return;
+
+        btn.IsEnabled = false;
+        try
+        {
+            var baseUrl = ServerApiClient.ToHttpBase(s.ServerUrl);
+            await App.Current.ServerApi.UninstallModelAsync(baseUrl, s.ApiKey, entry.Id);
+            await LoadProfileAsync(force: true);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Model uninstall", ex);
+            btn.IsEnabled = true;
+            ProfileStatus.Text = string.Format(L.T("Models.UninstallErrorFmt"), ex.Message);
+        }
+    }
+
+    // ===================== HuggingFace-Suche =====================
+
+    private void OnHfSearchTextChanged(object sender, TextChangedEventArgs e)
+    {
+        // Debounce: warte 400 ms nach der letzten Tastatur-Eingabe, dann suchen
+        _hfSearchDebounce ??= DispatcherQueue.CreateTimer();
+        _hfSearchDebounce.Interval = TimeSpan.FromMilliseconds(400);
+        _hfSearchDebounce.IsRepeating = false;
+        _hfSearchDebounce.Tick -= HfSearchTick;
+        _hfSearchDebounce.Tick += HfSearchTick;
+        _hfSearchDebounce.Start();
+    }
+
+    private async void HfSearchTick(Microsoft.UI.Dispatching.DispatcherQueueTimer t, object e)
+    {
+        t.Stop();
+        await RunHfSearchAsync(HfSearchBox.Text);
+    }
+
+    private async Task RunHfSearchAsync(string query)
+    {
+        // Vorigen Lauf canceln, damit der jüngste Tastendruck gewinnt
+        _hfSearchCts?.Cancel();
+        _hfSearchCts = new CancellationTokenSource();
+        var ct = _hfSearchCts.Token;
+
+        HfSearchSpinner.IsActive = true;
+        HfSearchEmpty.Visibility = Visibility.Collapsed;
+
+        IReadOnlyList<HuggingFaceSearchClient.SearchResult> results;
+        try
+        {
+            results = await App.Current.HfSearch.SearchAsync(query, limit: 24, ct);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn("HF search exception: " + ex.Message);
+            results = Array.Empty<HuggingFaceSearchClient.SearchResult>();
+        }
+
+        if (ct.IsCancellationRequested) return;
+        HfSearchSpinner.IsActive = false;
+        RenderHfResults(results);
+    }
+
+    private void RenderHfResults(IReadOnlyList<HuggingFaceSearchClient.SearchResult> results)
+    {
+        var L = App.Current.Loc;
+        HfSearchResults.Items.Clear();
+
+        // Repos rausfiltern, die schon im kuratierten Katalog sind — Doppel vermeidet UI-Redundanz
+        var curated = new HashSet<string>(
+            ModelCatalog.All.Select(e => e.Id), StringComparer.OrdinalIgnoreCase);
+
+        var filtered = results
+            .Where(r => !curated.Contains(r.Id))
+            .ToList();
+
+        if (filtered.Count == 0)
+        {
+            HfSearchEmpty.Text = L.T("HfSearch.NoResults");
+            HfSearchEmpty.Visibility = Visibility.Visible;
+            return;
+        }
+
+        foreach (var r in filtered)
+            HfSearchResults.Items.Add(BuildHfResultCard(r));
+    }
+
+    private FrameworkElement BuildHfResultCard(HuggingFaceSearchClient.SearchResult r)
+    {
+        var L = App.Current.Loc;
+        var installed = _installedModels.Contains(r.Id);
+
+        var borderSoft = (Brush)Application.Current.Resources["VABorderSoftBrush"];
+        var mute = (Brush)Application.Current.Resources["VATextMuteBrush"];
+        var dim = (Brush)Application.Current.Resources["VATextDimBrush"];
+        var text = (Brush)Application.Current.Resources["VATextBrush"];
+        var ok = (Brush)Application.Current.Resources["VAOkBrush"];
+        var monoFont = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["VAFontMono"];
+
+        var card = new Border
+        {
+            Padding = new Thickness(12),
+            CornerRadius = new CornerRadius(10),
+            BorderThickness = new Thickness(1),
+            BorderBrush = borderSoft,
+            Background = (Brush)Application.Current.Resources["VABgRaisedBrush"],
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        var stack = new StackPanel { Spacing = 4 };
+
+        // Repo-ID — org gedimmt, Name betont
+        var slashIdx = r.Id.IndexOf('/');
+        var org = slashIdx > 0 ? r.Id[..slashIdx] : "";
+        var name = slashIdx > 0 ? r.Id[(slashIdx + 1)..] : r.Id;
+        var idRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 0 };
+        if (!string.IsNullOrEmpty(org))
+        {
+            idRow.Children.Add(new TextBlock
+            {
+                Text = org + "/", FontFamily = monoFont, FontSize = 11, Foreground = mute,
+            });
+        }
+        idRow.Children.Add(new TextBlock
+        {
+            Text = name, FontFamily = monoFont, FontSize = 12.5,
+            FontWeight = Microsoft.UI.Text.FontWeights.Medium, Foreground = text,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        stack.Children.Add(idRow);
+
+        // Stats: Downloads + Likes
+        var statsText = string.Format(
+            L.T("HfSearch.StatsFmt"),
+            FormatCount(r.Downloads),
+            FormatCount(r.Likes));
+        stack.Children.Add(new TextBlock
+        {
+            Text = statsText, FontFamily = monoFont, FontSize = 10.5, Foreground = dim,
+            Margin = new Thickness(0, 4, 0, 0),
+        });
+
+        // Tags — nur die relevanten, max 3
+        if (r.Tags is { Length: > 0 })
+        {
+            var relevant = r.Tags
+                .Where(t => !t.StartsWith("license:", StringComparison.OrdinalIgnoreCase)
+                         && !t.StartsWith("region:", StringComparison.OrdinalIgnoreCase))
+                .Take(3)
+                .ToArray();
+            if (relevant.Length > 0)
+            {
+                stack.Children.Add(new TextBlock
+                {
+                    Text = string.Join(" · ", relevant),
+                    FontFamily = monoFont, FontSize = 10, Foreground = mute,
+                    Margin = new Thickness(0, 2, 0, 0),
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                });
+            }
+        }
+
+        // Action row
+        var actionRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal, Spacing = 8,
+            Margin = new Thickness(0, 10, 0, 0),
+        };
+        if (installed)
+        {
+            actionRow.Children.Add(new TextBlock
+            {
+                Text = L.T("Models.Installed"), FontFamily = monoFont,
+                FontSize = 11, Foreground = ok, VerticalAlignment = VerticalAlignment.Center,
+            });
+        }
+        else
+        {
+            var progress = new ProgressRing { IsActive = false, Width = 14, Height = 14 };
+            var btn = new Button
+            {
+                Content = L.T("Models.Btn.Install"),
+                Padding = new Thickness(10, 4, 10, 4),
+                FontSize = 11,
+            };
+            // Wir bauen einen "ad-hoc"-Catalog-Entry, damit der bestehende Install-Flow wiederverwendbar bleibt.
+            var adHocEntry = new ModelCatalog.Entry(
+                Id: r.Id,
+                ShortName: name,
+                Tag: "huggingface",
+                Label: name,
+                SizeApprox: "?",
+                Rtf: 1.0,
+                Hint: "");
+            btn.Click += async (_, _) => await InstallModelAsync(adHocEntry, btn, progress);
+            actionRow.Children.Add(progress);
+            actionRow.Children.Add(btn);
+        }
+        stack.Children.Add(actionRow);
+
+        card.Child = stack;
+        return card;
+    }
+
+    private static string FormatCount(int n) => n switch
+    {
+        >= 1_000_000 => $"{n / 1_000_000.0:F1}M",
+        >= 1_000 => $"{n / 1_000.0:F1}k",
+        _ => n.ToString(),
+    };
 
     private async void OnProfileSave(object sender, RoutedEventArgs e)
     {
@@ -1205,6 +1454,9 @@ public sealed partial class MainWindow : Window
         ServerTempLabel.Text = string.Format(L.T("Profile.TempFmt"), ServerTempSlider.Value);
         ModelsSectionLabel.Text = L.T("Models.Section");
         ModelsTitle.Text = L.T("Models.Title");
+        HfSearchSectionLabel.Text = L.T("HfSearch.Section");
+        HfSearchHint.Text = L.T("HfSearch.Hint");
+        HfSearchBox.PlaceholderText = L.T("HfSearch.Placeholder");
 
         // ----- Settings: vertikale Sub-Nav -----
         SettingsSectionLabel.Text = L.T("Settings.Section");

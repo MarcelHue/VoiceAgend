@@ -35,6 +35,10 @@ public static class ModelCatalog
             "large-v3", "multilingual",
             "Large v3", "~3 GB", 3.10, "Models.Hint.LargeV3"),
 
+        new Entry("Systran/faster-whisper-large-v3-turbo",
+            "large-v3-turbo", "multilingual",
+            "Large v3 Turbo", "~1.5 GB", 0.80, "Models.Hint.LargeV3Turbo"),
+
         new Entry("Systran/faster-distil-whisper-large-v3",
             "distil-large-v3", "english",
             "Distil-Large v3", "~1.5 GB", 1.10, "Models.Hint.DistilLargeV3"),

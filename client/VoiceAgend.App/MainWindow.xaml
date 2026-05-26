@@ -532,6 +532,47 @@
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                 </ItemsControl>
+
+                                <!-- HuggingFace-Suche für nicht-katalogisierte Modelle -->
+                                <Border BorderBrush="{ThemeResource VABorderSoftBrush}"
+                                        BorderThickness="0,1,0,0" Margin="0,4,0,0" Padding="0,14,0,0">
+                                    <StackPanel Spacing="10">
+                                        <StackPanel Orientation="Horizontal" Spacing="12">
+                                            <TextBlock x:Name="HfSearchSectionLabel"
+                                                       Style="{StaticResource VASectionLabel}"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock x:Name="HfSearchHint"
+                                                       Style="{StaticResource VAMono}" FontSize="10.5"
+                                                       Foreground="{ThemeResource VATextMuteBrush}"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Grid.Column="0" x:Name="HfSearchBox"
+                                                     TextChanged="OnHfSearchTextChanged"
+                                                     FontFamily="{StaticResource VAFontMono}" FontSize="12"
+                                                     Height="32" VerticalContentAlignment="Center" />
+                                            <ProgressRing Grid.Column="1" x:Name="HfSearchSpinner"
+                                                          Width="18" Height="18" IsActive="False" />
+                                        </Grid>
+                                        <ItemsControl x:Name="HfSearchResults"
+                                                      HorizontalContentAlignment="Stretch">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <views:WrapPanel HorizontalSpacing="10" VerticalSpacing="10"
+                                                                     MinItemWidth="240" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
+                                        <TextBlock x:Name="HfSearchEmpty" FontSize="11"
+                                                   Foreground="{ThemeResource VATextMuteBrush}"
+                                                   Visibility="Collapsed" />
+                                    </StackPanel>
+                                </Border>
+
                                 <TextBlock x:Name="ProfileApiKeyLabel"
                                            Style="{StaticResource VAMono}" FontSize="11" FontStyle="Italic"
                                            Foreground="{ThemeResource VATextMuteBrush}" />
