@@ -1,0 +1,113 @@
+name: 🐞 Bug Report
+description: Report a reproducible bug or crash in VoiceAgend
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report! The more details you give, the faster it can be fixed.
+
+        **Before submitting:**
+        - Search [existing issues](https://github.com/MarcelHue/VoiceAgend/issues?q=is%3Aissue) first.
+        - Try the latest release — your bug may already be fixed.
+
+  - type: input
+    id: version
+    attributes:
+      label: VoiceAgend version
+      description: Shown in the About panel (bottom-left of the app) or in the title bar.
+      placeholder: "e.g. 1.2.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Windows Client (App)
+        - Server (FastAPI / faster-whisper)
+        - Auto-Update
+        - Other / Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "e.g. Windows 11 Pro 23H2 (Build 22631)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: "When I press the hotkey while in Chrome, the recording starts but no transcript is inserted…"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps so the bug can be reproduced. Number them.
+      placeholder: |
+        1. Open VoiceAgend
+        2. Set output mode to "Type"
+        3. Focus a Chrome address bar
+        4. Press the hotkey, speak, release
+        5. Observe…
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: "Transcript should be typed into the focused field."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: "Nothing was typed; the transcript only ended up in the clipboard."
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log excerpt
+      description: |
+        Open the app → Settings → System → "Open log", or grab `%APPDATA%\VoiceAgend\app.log`.
+        Paste the **last ~50 lines** around the time the bug happened. Look for `ERROR` / `WARN` lines.
+      render: text
+      placeholder: |
+        [2026-05-26 14:32:11.123] INFO ===== VoiceAgend.App started =====
+        [2026-05-26 14:32:15.456] ERROR Output: …
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / video (optional)
+      description: Drag & drop images or short clips here.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I am running the latest release (or have noted my version above).
+          required: true
+        - label: I included a log excerpt and reproduction steps.
+          required: true

@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Integer, DateTime, Boolean, ForeignKey, Float
+from sqlalchemy import String, Integer, DateTime, Boolean, ForeignKey, Float, Text, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from .config import settings
@@ -42,6 +42,11 @@ class Profile(Base):
     model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     prompt: Mapped[str | None] = mapped_column(String, nullable=True)
     temperature: Mapped[float] = mapped_column(default=0.0)
+    # Client-Settings als JSON-Blob (Theme, Hotkey, Output-Modus, …) damit der User
+    # auf einem neuen Gerät seine Präferenzen automatisch zurückbekommt. Spalte ist
+    # nullable, damit alte Datensätze ohne Migration auskommen.
+    client_settings: Mapped[str | None] = mapped_column(Text, nullable=True)
+    client_settings_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     api_key: Mapped[ApiKey] = relationship(back_populates="profile")
@@ -66,6 +71,20 @@ SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSe
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Lightweight Migration: neue Spalten ergänzen, falls eine alte DB existiert.
+        # SQLite kennt kein "ADD COLUMN IF NOT EXISTS" — wir prüfen über PRAGMA.
+        await _migrate_profile_client_settings(conn)
+
+
+async def _migrate_profile_client_settings(conn) -> None:
+    res = await conn.exec_driver_sql("PRAGMA table_info(profiles)")
+    cols = {row[1] for row in res.fetchall()}
+    if "client_settings" not in cols:
+        await conn.exec_driver_sql("ALTER TABLE profiles ADD COLUMN client_settings TEXT")
+    if "client_settings_updated_at" not in cols:
+        await conn.exec_driver_sql(
+            "ALTER TABLE profiles ADD COLUMN client_settings_updated_at DATETIME"
+        )
 
 
 async def get_session() -> AsyncSession:

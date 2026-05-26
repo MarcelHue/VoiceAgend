@@ -1,0 +1,59 @@
+name: ✨ Feature Request
+description: Suggest a new feature or improvement for VoiceAgend
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please describe the problem first, then your proposed solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: What is your use case? What feels missing or awkward today?
+      placeholder: "I dictate into apps that don't accept the 'Paste' output mode, and typing one character at a time is too slow."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would the ideal behavior look like? A UI sketch helps.
+      placeholder: "Add a 'Burst typing' option that types in chunks of 5 chars to balance speed and stability…"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      placeholder: "I tried switching to Clipboard mode but then I have to Ctrl+V manually."
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Windows Client (App)
+        - Server (FastAPI / faster-whisper)
+        - Both / Cross-cutting
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, screenshots, related issues, references.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and discussions and this is not a duplicate.
+          required: true

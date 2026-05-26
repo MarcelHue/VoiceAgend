@@ -18,7 +18,9 @@ public sealed class ServerApiClient
         [property: JsonPropertyName("model")] string? Model,
         [property: JsonPropertyName("prompt")] string? Prompt,
         [property: JsonPropertyName("temperature")] double Temperature,
-        [property: JsonPropertyName("server_default_model")] string? ServerDefaultModel = null);
+        [property: JsonPropertyName("server_default_model")] string? ServerDefaultModel = null,
+        [property: JsonPropertyName("client_settings")] JsonElement? ClientSettings = null,
+        [property: JsonPropertyName("client_settings_updated_at")] DateTime? ClientSettingsUpdatedAt = null);
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
@@ -71,6 +73,8 @@ public sealed class ServerApiClient
     public async Task<Profile> UpdateProfileAsync(
         string baseUrl, string apiKey,
         string? model, string? prompt, double? temperature,
+        IDictionary<string, object?>? clientSettings = null,
+        DateTime? clientSettingsUpdatedAtUtc = null,
         CancellationToken ct = default)
     {
         using var http = Build(baseUrl, apiKey);
@@ -78,6 +82,10 @@ public sealed class ServerApiClient
         if (model is not null) payload["model"] = model;
         if (prompt is not null) payload["prompt"] = prompt;
         if (temperature is not null) payload["temperature"] = temperature;
+        if (clientSettings is not null) payload["client_settings"] = clientSettings;
+        if (clientSettingsUpdatedAtUtc is not null)
+            payload["client_settings_updated_at"] = clientSettingsUpdatedAtUtc.Value
+                .ToUniversalTime().ToString("o");
         var r = await http.PutAsJsonAsync("/api/v1/profile", payload, JsonOpts, ct);
         r.EnsureSuccessStatusCode();
         return (await r.Content.ReadFromJsonAsync<Profile>(JsonOpts, ct))!;

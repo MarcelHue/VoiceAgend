@@ -122,6 +122,19 @@ public sealed partial class MainWindow : Window
         App.Current.Updates.StatusChanged += st =>
             DispatcherQueue.TryEnqueue(() => ShowUpdateStatus(st));
 
+        // Wenn ein anderes Gerät die Settings gepusht hat und wir sie beim Startup-Sync
+        // gezogen haben, müssen Theme, Locale und alle UI-Felder neu geladen werden.
+        App.Current.ProfileSync.RemoteSettingsApplied += () =>
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                Themes.ThemeManager.Apply(App.Current.Settings.Theme);
+                App.Current.Loc.Load(App.Current.Settings.UiLanguage);
+                App.Current.ApplyHotkey();
+                _suppressAutoSave = true;
+                try { LoadIntoUi(); }
+                finally { _suppressAutoSave = false; }
+            });
+
         ShowWindowCommand = new RelayCommand(_ => Activate());
         ToggleCommand = new RelayCommand(async _ => await App.Current.Coordinator.ToggleAsync());
         QuitCommand = new RelayCommand(_ => DoQuit());
@@ -148,6 +161,13 @@ public sealed partial class MainWindow : Window
         // Initial: Home-View aktiv
         if (Nav.SelectedItem == null)
             Nav.SelectedItem = Nav.MenuItems[0];
+
+        // Wenn nach einem Update zum ersten Mal gestartet: WhatsNew-Seite aufzwingen
+        MaybeAutoShowWhatsNew();
+
+        // Prompt-Vorschau auf der Home-Seite vorab füllen — sonst zeigt sie bis zum
+        // ersten Profil-Tab-Besuch nur den "noch nichts gesetzt"-Hinweis.
+        _ = PrefetchPromptPreviewAsync();
 
         // Letztes Transkript einblenden, falls vorhanden
         if (!string.IsNullOrEmpty(App.Current.Coordinator.LastTranscript))
@@ -228,8 +248,304 @@ public sealed partial class MainWindow : Window
         HomeView.Visibility = tag == "home" ? Visibility.Visible : Visibility.Collapsed;
         ProfileView.Visibility = tag == "profile" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = tag == "settings" ? Visibility.Visible : Visibility.Collapsed;
+        WhatsNewView.Visibility = tag == "whatsnew" ? Visibility.Visible : Visibility.Collapsed;
+        AboutView.Visibility = tag == "about" ? Visibility.Visible : Visibility.Collapsed;
         if (tag == "profile") _ = LoadProfileAsync();
         if (tag == "settings") ApplySettingsTab(_activeSettingsTab);
+        if (tag == "whatsnew") _ = LoadWhatsNewAsync();
+        if (tag == "about") RenderAbout();
+    }
+
+    private async Task PrefetchPromptPreviewAsync()
+    {
+        var s = App.Current.Settings;
+        if (string.IsNullOrWhiteSpace(s.ApiKey) || string.IsNullOrWhiteSpace(s.ServerUrl)) return;
+        try
+        {
+            var baseUrl = ServerApiClient.ToHttpBase(s.ServerUrl);
+            var p = await App.Current.ServerApi.GetProfileAsync(baseUrl, s.ApiKey);
+            DispatcherQueue.TryEnqueue(() => UpdatePromptPreview(p.Prompt));
+        }
+        catch (Exception ex) { Logger.Warn("PrefetchPromptPreview: " + ex.Message); }
+    }
+
+    /// <summary>
+    /// Aktualisiert die Prompt-Vorschau auf der Home-Seite. Leerer/null-Prompt zeigt den
+    /// "noch nichts gesetzt"-Hinweis, sonst den echten Prompt-Text.
+    /// </summary>
+    private void UpdatePromptPreview(string? prompt)
+    {
+        var L = App.Current.Loc;
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            PromptPreviewText.Text = L.T("Home.Prompt.Empty");
+            PromptPreviewText.FontStyle = Windows.UI.Text.FontStyle.Italic;
+            PromptPreviewText.Foreground = (Brush)Application.Current.Resources["VATextMuteBrush"];
+        }
+        else
+        {
+            PromptPreviewText.Text = prompt!.Trim();
+            PromptPreviewText.FontStyle = Windows.UI.Text.FontStyle.Normal;
+            PromptPreviewText.Foreground = (Brush)Application.Current.Resources["VATextDimBrush"];
+        }
+    }
+
+    // ============================= WHAT'S NEW =============================
+
+    private bool _whatsNewLoaded;
+    private bool _whatsNewAutoShown;
+
+    /// <summary>
+    /// Wenn die aktuelle App-Version ≠ LastSeenVersion → User hat geupdated,
+    /// also automatisch auf die "What's New"-Seite springen und LastSeenVersion bumpen.
+    /// </summary>
+    private void MaybeAutoShowWhatsNew()
+    {
+        if (_whatsNewAutoShown) return;
+        var current = WhatsNewService.CurrentVersion();
+        var last = App.Current.Settings.LastSeenVersion ?? "";
+
+        // Erster Start überhaupt (kein LastSeenVersion gespeichert) → kein WhatsNew
+        // aufzwingen; nur bei einem echten Upgrade switchen.
+        if (string.IsNullOrEmpty(last))
+        {
+            App.Current.Settings.LastSeenVersion = current;
+            App.Current.SaveSettings();
+            _whatsNewAutoShown = true;
+            return;
+        }
+
+        if (!string.Equals(last, current, StringComparison.OrdinalIgnoreCase))
+        {
+            Logger.Info($"WhatsNew: version changed {last} → {current}, switching to WhatsNew page");
+            App.Current.Settings.LastSeenVersion = current;
+            App.Current.SaveSettings();
+            _whatsNewAutoShown = true;
+            try
+            {
+                foreach (var mi in Nav.MenuItems)
+                {
+                    if (mi is NavigationViewItem nvi && (nvi.Tag as string) == "whatsnew")
+                    {
+                        Nav.SelectedItem = nvi;
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex) { Logger.Warn("WhatsNew auto-switch: " + ex.Message); }
+        }
+        else
+        {
+            _whatsNewAutoShown = true;
+        }
+    }
+
+    private async Task LoadWhatsNewAsync()
+    {
+        if (_whatsNewLoaded) return;
+        _whatsNewLoaded = true;
+        var L = App.Current.Loc;
+
+        WhatsNewSpinner.IsActive = true;
+        WhatsNewList.Items.Clear();
+        WhatsNewEmptyHint.Visibility = Visibility.Collapsed;
+
+        IReadOnlyList<WhatsNewService.ReleaseEntry> releases;
+        try
+        {
+            releases = await App.Current.WhatsNew.FetchLatestReleasesAsync(count: 5);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn("WhatsNew load: " + ex.Message);
+            releases = Array.Empty<WhatsNewService.ReleaseEntry>();
+        }
+
+        WhatsNewSpinner.IsActive = false;
+        if (releases.Count == 0)
+        {
+            WhatsNewEmptyHint.Text = L.T("WhatsNew.Empty");
+            WhatsNewEmptyHint.Visibility = Visibility.Visible;
+            // Cache freigeben — bei erneutem Öffnen lieber nochmal versuchen
+            _whatsNewLoaded = false;
+            return;
+        }
+
+        foreach (var r in releases)
+            WhatsNewList.Items.Add(BuildWhatsNewCard(r));
+    }
+
+    private FrameworkElement BuildWhatsNewCard(WhatsNewService.ReleaseEntry r)
+    {
+        var L = App.Current.Loc;
+        var monoFont = (FontFamily)Application.Current.Resources["VAFontMono"];
+        var sansFont = (FontFamily)Application.Current.Resources["VAFont"];
+        var accent = (Brush)Application.Current.Resources["VAAccentBrush"];
+        var text = (Brush)Application.Current.Resources["VATextBrush"];
+        var dim = (Brush)Application.Current.Resources["VATextDimBrush"];
+        var mute = (Brush)Application.Current.Resources["VATextMuteBrush"];
+        var borderSoft = (Brush)Application.Current.Resources["VABorderSoftBrush"];
+
+        var card = new Border
+        {
+            Padding = new Thickness(16),
+            CornerRadius = new CornerRadius(10),
+            BorderThickness = new Thickness(1),
+            BorderBrush = borderSoft,
+            Background = (Brush)Application.Current.Resources["VABgRaisedBrush"],
+            Margin = new Thickness(0, 0, 0, 10),
+        };
+        var stack = new StackPanel { Spacing = 6 };
+
+        var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+        header.Children.Add(new TextBlock
+        {
+            Text = r.Title,
+            FontFamily = sansFont, FontSize = 15,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Foreground = text,
+        });
+        if (!string.IsNullOrEmpty(r.TagName))
+        {
+            header.Children.Add(new Border
+            {
+                BorderBrush = accent, BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4), Padding = new Thickness(6, 1, 6, 1),
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock
+                {
+                    Text = r.TagName, FontFamily = monoFont, FontSize = 10,
+                    Foreground = accent,
+                },
+            });
+        }
+        stack.Children.Add(header);
+
+        if (r.PublishedAt != DateTime.MinValue)
+        {
+            stack.Children.Add(new TextBlock
+            {
+                Text = r.PublishedAt.ToLocalTime().ToString("yyyy-MM-dd"),
+                FontFamily = monoFont, FontSize = 10.5, Foreground = mute,
+            });
+        }
+
+        var headline = WhatsNewService.ExtractHeadline(r.Body);
+        if (!string.IsNullOrEmpty(headline) && !string.Equals(headline, r.Title, StringComparison.OrdinalIgnoreCase))
+        {
+            stack.Children.Add(new TextBlock
+            {
+                Text = headline,
+                FontFamily = monoFont, FontSize = 11.5,
+                Foreground = dim, TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 6, 0, 0),
+            });
+        }
+
+        var bullets = WhatsNewService.ExtractBulletLines(r.Body);
+        var hasMore = bullets.Count > 5;
+        if (bullets.Count > 0)
+        {
+            var listStack = new StackPanel { Spacing = 4, Margin = new Thickness(0, 8, 0, 0) };
+            foreach (var b in bullets.Take(5))
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                row.Children.Add(new TextBlock
+                {
+                    Text = "•", FontFamily = monoFont, FontSize = 13,
+                    Foreground = accent, VerticalAlignment = VerticalAlignment.Top,
+                });
+                row.Children.Add(new TextBlock
+                {
+                    Text = b, FontFamily = sansFont, FontSize = 13,
+                    Foreground = dim, TextWrapping = TextWrapping.Wrap,
+                    MaxWidth = 720,
+                });
+                listStack.Children.Add(row);
+            }
+            if (hasMore)
+            {
+                listStack.Children.Add(new TextBlock
+                {
+                    Text = string.Format(L.T("WhatsNew.MoreFmt"), bullets.Count - 5),
+                    FontFamily = monoFont, FontSize = 10.5,
+                    Foreground = mute, Margin = new Thickness(20, 4, 0, 0),
+                    FontStyle = Windows.UI.Text.FontStyle.Italic,
+                });
+            }
+            stack.Children.Add(listStack);
+        }
+
+        if (!string.IsNullOrEmpty(r.HtmlUrl))
+        {
+            var link = new Button
+            {
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(0, 4, 0, 0),
+                Margin = new Thickness(0, 8, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Content = new TextBlock
+                {
+                    Text = L.T("WhatsNew.ReadFull"),
+                    FontFamily = monoFont, FontSize = 11,
+                    Foreground = accent,
+                },
+            };
+            link.Click += async (_, _) =>
+            {
+                try { await Windows.System.Launcher.LaunchUriAsync(new Uri(r.HtmlUrl)); }
+                catch (Exception ex) { Logger.Warn("WhatsNew link: " + ex.Message); }
+            };
+            stack.Children.Add(link);
+        }
+
+        card.Child = stack;
+        return card;
+    }
+
+    // ============================= ABOUT =============================
+
+    private void RenderAbout()
+    {
+        var L = App.Current.Loc;
+        AboutSectionLabel.Text = L.T("About.Section");
+        AboutTitle.Text = L.T("About.Title");
+        AboutVersionText.Text = string.Format(L.T("About.VersionFmt"), WhatsNewService.CurrentVersion());
+        AboutTagline.Text = L.T("About.Tagline");
+        AboutAuthorLabel.Text = L.T("About.AuthorLabel");
+        AboutAuthorValue.Text = L.T("About.AuthorValue");
+        AboutLinksLabel.Text = L.T("About.LinksLabel");
+        AboutGithubLabel.Text = L.T("About.Btn.Github");
+        AboutBugLabel.Text = L.T("About.Btn.Bug");
+        AboutFeatureLabel.Text = L.T("About.Btn.Feature");
+        AboutBugHint.Text = L.T("About.BugHint");
+    }
+
+    private async void OnAboutOpenGithub(object sender, RoutedEventArgs e)
+    {
+        try { await Windows.System.Launcher.LaunchUriAsync(new Uri(WhatsNewService.RepoUrl)); }
+        catch (Exception ex) { Logger.Warn("About.Github: " + ex.Message); }
+    }
+
+    private async void OnAboutReportBug(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var url = $"{WhatsNewService.RepoUrl.TrimEnd('/')}/issues/new?template=bug_report.yml";
+            await Windows.System.Launcher.LaunchUriAsync(new Uri(url));
+        }
+        catch (Exception ex) { Logger.Warn("About.Bug: " + ex.Message); }
+    }
+
+    private async void OnAboutFeatureRequest(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var url = $"{WhatsNewService.RepoUrl.TrimEnd('/')}/issues/new?template=feature_request.yml";
+            await Windows.System.Launcher.LaunchUriAsync(new Uri(url));
+        }
+        catch (Exception ex) { Logger.Warn("About.Feature: " + ex.Message); }
     }
 
     private string _activeSettingsTab = "connection";
@@ -356,6 +672,7 @@ public sealed partial class MainWindow : Window
                 ServerModelCombo.SelectedIndex = idx >= 0 ? idx : 0;
             }
             ServerPromptBox.Text = p.Prompt ?? "";
+            UpdatePromptPreview(p.Prompt);
             ServerTempSlider.Value = p.Temperature;
             ServerTempLabel.Text = string.Format(App.Current.Loc.T("Profile.TempFmt"), p.Temperature);
 
@@ -1068,6 +1385,7 @@ public sealed partial class MainWindow : Window
             var prompt = ServerPromptBox.Text;
             var temp = ServerTempSlider.Value;
             await App.Current.ServerApi.UpdateProfileAsync(baseUrl, s.ApiKey, model ?? "", prompt, temp);
+            UpdatePromptPreview(prompt);
             ProfileStatus.Text = string.Format(App.Current.Loc.T("Status.SavedFmt"), DateTime.Now);
         }
         catch (Exception ex)
@@ -1545,8 +1863,15 @@ public sealed partial class MainWindow : Window
     {
         // Verstecke statt zu beenden — über Tray-Menü "Beenden" setzen wir _quitting=true
         if (_quitting) return;
+#if DEBUG
+        // Dev-Builds: X = wirklich beenden, damit Iteration nicht im Tray stecken bleibt
+        Logger.Info("Window X clicked in DEBUG build → quitting instead of hiding");
+        DoQuit();
+        return;
+#else
         e.Handled = true;
         AppWindow.Hide();
+#endif
     }
 
     private void OnOpenLog(object sender, RoutedEventArgs e)
@@ -1640,6 +1965,16 @@ public sealed partial class MainWindow : Window
         ((NavigationViewItem)Nav.MenuItems[0]).Content = L.T("Nav.Transcript");
         ((NavigationViewItem)Nav.MenuItems[1]).Content = L.T("Nav.Profile");
         ((NavigationViewItem)Nav.MenuItems[2]).Content = L.T("Nav.Settings");
+        NavWhatsNewItem.Content = L.T("Nav.WhatsNew");
+        ToolTipService.SetToolTip(NavWhatsNewItem, L.T("Nav.WhatsNew"));
+        NavAboutItem.Content = L.T("Nav.About");
+        ToolTipService.SetToolTip(NavAboutItem, L.T("Nav.About"));
+
+        // WhatsNew + About statische Texte
+        WhatsNewSectionLabel.Text = L.T("WhatsNew.Section");
+        WhatsNewTitle.Text = L.T("WhatsNew.Title");
+        WhatsNewSubtitle.Text = string.Format(L.T("WhatsNew.SubtitleFmt"), WhatsNewService.CurrentVersion());
+        RenderAbout();
 
         // Tray
         try

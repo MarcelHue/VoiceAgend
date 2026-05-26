@@ -73,6 +73,13 @@ public sealed class AppSettings
     public bool? PlaySoundOnStart { get; set; }
     public bool? PlaySoundOnStop { get; set; }
 
+    /// <summary>Version, die der User beim letzten Start gesehen hat — leer = erster Start oder Upgrade von Pre-WhatsNew.</summary>
+    public string LastSeenVersion { get; set; } = "";
+
+    /// <summary>Wann der User die syncbaren Settings (Theme, Hotkey, …) zuletzt geändert hat.
+    /// Wird für den Last-Write-Wins-Sync mit dem Server-Profil verwendet.</summary>
+    public DateTime SettingsUpdatedAtUtc { get; set; } = DateTime.MinValue;
+
     public bool HudEnabled { get; set; } = true;
     public HudPosition HudPosition { get; set; } = HudPosition.TopRight;
     public int HudMargin { get; set; } = 24;

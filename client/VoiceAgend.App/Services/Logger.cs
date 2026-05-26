@@ -27,7 +27,7 @@ public static class Logger
     {
         try
         {
-            var line = $"[{DateTime.Now:HH:mm:ss.fff}] {level} {msg}";
+            var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {level} {msg}";
             lock (Sync) File.AppendAllText(FilePath, line + Environment.NewLine);
         }
         catch { /* Logging darf nie crashen */ }

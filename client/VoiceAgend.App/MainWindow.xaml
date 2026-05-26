@@ -88,7 +88,15 @@
                 <NavigationViewItem Tag="home" Icon="Document" />
                 <NavigationViewItem Tag="profile" Icon="Globe" />
                 <NavigationViewItem Tag="settings" Icon="Setting" />
+                <NavigationViewItem x:Name="NavWhatsNewItem" Tag="whatsnew" Icon="Message" />
             </NavigationView.MenuItems>
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem x:Name="NavAboutItem" Tag="about">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE946;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
 
             <Grid>
                 <!-- ========================== TRANSKRIPT-SEITE ========================== -->
@@ -992,6 +1000,109 @@
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
+                <!-- ========================== WHAT'S NEW ========================== -->
+                <ScrollViewer x:Name="WhatsNewView" Visibility="Collapsed"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <StackPanel Padding="14,10,18,18" Spacing="14">
+                        <StackPanel Spacing="4">
+                            <TextBlock x:Name="WhatsNewSectionLabel"
+                                       Style="{StaticResource VASectionLabel}" />
+                            <TextBlock x:Name="WhatsNewTitle"
+                                       Style="{StaticResource VAPageTitle}" />
+                            <TextBlock x:Name="WhatsNewSubtitle" FontSize="12"
+                                       Foreground="{ThemeResource VATextMuteBrush}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Border Style="{StaticResource VAGlassCard}" Padding="20,18">
+                            <StackPanel Spacing="14">
+                                <ProgressRing x:Name="WhatsNewSpinner"
+                                              Width="20" Height="20" IsActive="False"
+                                              HorizontalAlignment="Left" />
+                                <TextBlock x:Name="WhatsNewEmptyHint" FontSize="12"
+                                           Foreground="{ThemeResource VATextMuteBrush}"
+                                           TextWrapping="Wrap" Visibility="Collapsed" />
+                                <ItemsControl x:Name="WhatsNewList"
+                                              HorizontalContentAlignment="Stretch" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- ========================== ABOUT ========================== -->
+                <ScrollViewer x:Name="AboutView" Visibility="Collapsed"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <StackPanel Padding="14,10,18,18" Spacing="14" MaxWidth="720"
+                                HorizontalAlignment="Left">
+                        <StackPanel Spacing="4">
+                            <TextBlock x:Name="AboutSectionLabel"
+                                       Style="{StaticResource VASectionLabel}" />
+                            <TextBlock x:Name="AboutTitle"
+                                       Style="{StaticResource VAPageTitle}" />
+                        </StackPanel>
+                        <Border Style="{StaticResource VAGlassCard}" Padding="22">
+                            <StackPanel Spacing="16">
+                                <StackPanel Orientation="Horizontal" Spacing="14"
+                                            VerticalAlignment="Center">
+                                    <Ellipse Width="36" Height="36"
+                                             Fill="{ThemeResource VAAccentBrush}" />
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="VoiceAgend" FontSize="20"
+                                                   FontWeight="SemiBold"
+                                                   FontFamily="{StaticResource VAFont}"
+                                                   Foreground="{ThemeResource VATextBrush}" />
+                                        <TextBlock x:Name="AboutVersionText"
+                                                   Style="{StaticResource VAMono}" FontSize="11"
+                                                   Foreground="{ThemeResource VATextMuteBrush}" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <TextBlock x:Name="AboutTagline" TextWrapping="Wrap" FontSize="13"
+                                           Foreground="{ThemeResource VATextDimBrush}" />
+
+                                <Border BorderBrush="{ThemeResource VABorderSoftBrush}"
+                                        BorderThickness="0,1,0,0" Padding="0,14,0,0">
+                                    <StackPanel Spacing="10">
+                                        <TextBlock x:Name="AboutAuthorLabel" FontSize="11"
+                                                   Style="{StaticResource VASectionLabel}" />
+                                        <TextBlock x:Name="AboutAuthorValue" FontSize="13"
+                                                   Foreground="{ThemeResource VATextBrush}" />
+                                    </StackPanel>
+                                </Border>
+
+                                <StackPanel Spacing="10">
+                                    <TextBlock x:Name="AboutLinksLabel" FontSize="11"
+                                               Style="{StaticResource VASectionLabel}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <Button x:Name="AboutGithubButton" Click="OnAboutOpenGithub">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xE8A7;" FontSize="13" />
+                                                <TextBlock x:Name="AboutGithubLabel" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="AboutBugButton" Click="OnAboutReportBug">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xEBE8;" FontSize="13" />
+                                                <TextBlock x:Name="AboutBugLabel" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="AboutFeatureButton" Click="OnAboutFeatureRequest"
+                                                Style="{StaticResource AccentButtonStyle}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xE945;" FontSize="13" />
+                                                <TextBlock x:Name="AboutFeatureLabel" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                    <TextBlock x:Name="AboutBugHint" FontSize="11"
+                                               Foreground="{ThemeResource VATextMuteBrush}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
         </NavigationView>
     </Grid>

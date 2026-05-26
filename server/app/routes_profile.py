@@ -1,4 +1,6 @@
-from typing import Annotated
+import json
+from datetime import datetime
+from typing import Annotated, Any
 from urllib.parse import quote
 
 import httpx
@@ -29,12 +31,21 @@ class ProfileOut(BaseModel):
     # Gateway-Fallback (env WHISPER_MODEL) — wird verwendet, wenn profile.model = NULL.
     # Der Client braucht das, um zu prüfen, ob der "Server-Default" überhaupt installiert ist.
     server_default_model: str | None = None
+    # Software-Präferenzen (Theme, Hotkey, …). Wir geben das als dict zurück, damit der
+    # Client neue Keys hinzufügen kann, ohne das Server-Schema mit aufzubohren.
+    client_settings: dict[str, Any] | None = None
+    client_settings_updated_at: datetime | None = None
 
 
 class ProfileUpdate(BaseModel):
     model: str | None = Field(default=None, max_length=255)
     prompt: str | None = Field(default=None, max_length=4000)
     temperature: float | None = Field(default=None, ge=0.0, le=1.0)
+    client_settings: dict[str, Any] | None = None
+    # ISO-8601-Timestamp wann der Client diese Settings zuletzt geändert hat (UTC).
+    # Server akzeptiert nur, wenn der Wert neuer ist als das Stored — schützt vor
+    # Race Conditions zwischen mehreren Geräten.
+    client_settings_updated_at: datetime | None = None
 
 
 @router.get("/models", response_model=list[ModelOut])
@@ -127,6 +138,16 @@ async def update_profile(
         profile.prompt = payload.prompt or None
     if payload.temperature is not None:
         profile.temperature = payload.temperature
+    if payload.client_settings is not None:
+        incoming_ts = payload.client_settings_updated_at or datetime.utcnow()
+        # Last-Write-Wins per Timestamp: nur überschreiben, wenn der eingehende Stand
+        # neuer ist. So ist es egal, in welcher Reihenfolge mehrere Geräte syncen.
+        if (
+            profile.client_settings_updated_at is None
+            or incoming_ts >= profile.client_settings_updated_at
+        ):
+            profile.client_settings = json.dumps(payload.client_settings, ensure_ascii=False)
+            profile.client_settings_updated_at = incoming_ts
     await db.commit()
     await db.refresh(profile)
     return await _profile_for(api_key, db)
@@ -145,6 +166,12 @@ async def _ensure_profile(api_key: ApiKey, db: AsyncSession) -> Profile:
 
 async def _profile_for(api_key: ApiKey, db: AsyncSession) -> ProfileOut:
     p = await _ensure_profile(api_key, db)
+    client_settings: dict[str, Any] | None = None
+    if p.client_settings:
+        try:
+            client_settings = json.loads(p.client_settings)
+        except (ValueError, TypeError):
+            client_settings = None
     return ProfileOut(
         api_key_id=api_key.id,
         api_key_name=api_key.name,
@@ -152,4 +179,6 @@ async def _profile_for(api_key: ApiKey, db: AsyncSession) -> ProfileOut:
         prompt=p.prompt,
         temperature=p.temperature,
         server_default_model=settings.whisper_model or None,
+        client_settings=client_settings,
+        client_settings_updated_at=p.client_settings_updated_at,
     )
