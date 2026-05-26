@@ -168,6 +168,9 @@
   "HfSearch.Placeholder": "e.g. 'german', 'distil', 'turbo' — empty = top Whisper models",
   "HfSearch.StatsFmt": "{0} downloads · {1} likes",
   "HfSearch.NoResults": "No additional models found.",
+  "HfSearch.VramFmt": "{0} VRAM (int8_float16, estimated)",
+  "HfSearch.UnknownSize": "Size unknown — verify before installing",
+  "HfSearch.OpenOnHfFmt": "Open on huggingface.co: {0}",
   "Models.Hint.Tiny": "Fast, tiny footprint — quality sufficient for dictation with clear speech.",
   "Models.Hint.Base": "Good balance between speed and quality for mobile or weak servers.",
   "Models.Hint.Small": "Noticeably better than Base, still very fast on CPU.",
@@ -181,6 +184,7 @@
   "Models.Btn.Retry": "Retry",
   "Models.Installed": "✓ Installed",
   "Models.ErrorFmt": "Install failed: {0}",
+  "Models.EmptyHint": "No models installed on the server yet. Pick one from the search below and click \"Install\".",
 
   "Status.Recording": "Recording…",
   "Status.Sending": "Sending…",
@@ -209,6 +213,7 @@
   "Update.CheckFailedFmt": "Update check failed: {0}",
   "Update.FailedFmt": "Update failed: {0}",
 
+  "Profile.AutoSwitchedFmt": "Active model was not installed — automatically switched to '{0}'.",
   "Profile.NoApiKey": "Set API key in settings first.",
   "Profile.Loading": "Loading…"
 }

@@ -168,6 +168,9 @@
   "HfSearch.Placeholder": "z. B. 'german', 'distil', 'turbo' — leer = Top-Whisper-Modelle",
   "HfSearch.StatsFmt": "{0} Downloads · {1} Likes",
   "HfSearch.NoResults": "Keine zusätzlichen Modelle gefunden.",
+  "HfSearch.VramFmt": "{0} VRAM (int8_float16, geschätzt)",
+  "HfSearch.UnknownSize": "Größe unbekannt — bei Install verifizieren",
+  "HfSearch.OpenOnHfFmt": "Auf huggingface.co öffnen: {0}",
   "Models.Hint.Tiny": "Schnell, geringer Speicherbedarf — Qualität für Diktat ausreichend bei klarer Sprache.",
   "Models.Hint.Base": "Gute Balance zwischen Speed und Qualität für mobile/schwache Server.",
   "Models.Hint.Small": "Spürbar besser als Base, immer noch sehr schnell auf CPU.",
@@ -181,6 +184,7 @@
   "Models.Btn.Retry": "Erneut versuchen",
   "Models.Installed": "✓ Installiert",
   "Models.ErrorFmt": "Install-Fehler: {0}",
+  "Models.EmptyHint": "Noch keine Modelle auf dem Server installiert. Such unten ein passendes aus und klicke „Installieren“.",
 
   "Status.Recording": "Aufnahme läuft…",
   "Status.Sending": "Sende…",
@@ -209,6 +213,7 @@
   "Update.CheckFailedFmt": "Update-Check fehlgeschlagen: {0}",
   "Update.FailedFmt": "Update fehlgeschlagen: {0}",
 
+  "Profile.AutoSwitchedFmt": "Aktives Modell war nicht installiert — automatisch auf „{0}“ umgeschaltet.",
   "Profile.NoApiKey": "Erst API-Key in Einstellungen setzen.",
   "Profile.Loading": "Lade…"
 }

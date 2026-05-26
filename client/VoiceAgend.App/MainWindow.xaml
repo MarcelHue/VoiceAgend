@@ -532,6 +532,9 @@
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                 </ItemsControl>
+                                <TextBlock x:Name="ModelsEmptyHint" FontSize="12"
+                                           Foreground="{ThemeResource VATextMuteBrush}"
+                                           TextWrapping="Wrap" Visibility="Collapsed" />
 
                                 <!-- HuggingFace-Suche für nicht-katalogisierte Modelle -->
                                 <Border BorderBrush="{ThemeResource VABorderSoftBrush}"
@@ -563,7 +566,7 @@
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
                                                     <views:WrapPanel HorizontalSpacing="10" VerticalSpacing="10"
-                                                                     MinItemWidth="240" />
+                                                                     MinItemWidth="280" />
                                                 </ItemsPanelTemplate>
                                             </ItemsControl.ItemsPanel>
                                         </ItemsControl>

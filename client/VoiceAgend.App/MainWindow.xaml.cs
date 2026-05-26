@@ -324,6 +324,30 @@ public sealed partial class MainWindow : Window
             ProfileApiKeyLabel.Text = string.Format(
                 App.Current.Loc.T("Profile.ApiKeyFmt"), p.ApiKeyName, p.ApiKeyId);
 
+            // Auto-Fix: das aktuell effektive Modell prüfen.
+            //   - p.Model gesetzt UND nicht installiert  → veralteter Eintrag, auto-korrigieren
+            //   - p.Model null UND Server-Default nicht installiert → auf erstes installiertes umschalten
+            // In beiden Fällen wählen wir das erste installierte Modell und speichern es im Profil.
+            var effective = string.IsNullOrEmpty(p.Model) ? p.ServerDefaultModel : p.Model;
+            var effectiveInstalled = !string.IsNullOrEmpty(effective)
+                && _installedModels.Contains(effective);
+            if (!effectiveInstalled && _installedModels.Count > 0)
+            {
+                var firstInstalled = _installedModels.First();
+                Logger.Info($"Profile auto-fix: effective='{effective}' not installed, switching to '{firstInstalled}'");
+                try
+                {
+                    p = await App.Current.ServerApi.UpdateProfileAsync(
+                        baseUrl, s.ApiKey, model: firstInstalled, prompt: null, temperature: null);
+                    ProfileStatus.Text = string.Format(
+                        App.Current.Loc.T("Profile.AutoSwitchedFmt"), firstInstalled);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn("Profile auto-switch failed: " + ex.Message);
+                }
+            }
+
             if (string.IsNullOrEmpty(p.Model))
                 ServerModelCombo.SelectedIndex = 0;
             else
@@ -354,10 +378,28 @@ public sealed partial class MainWindow : Window
     private void BuildCatalogList()
     {
         ModelCatalogList.Items.Clear();
-        foreach (var entry in ModelCatalog.All)
+
+        // Nur die tatsächlich auf dem Server installierten Modelle anzeigen.
+        // Modell-Spezifikationen (Größe, RTF, VRAM) werden aus dem Namen heuristisch geschätzt.
+        foreach (var modelId in _installedModels)
         {
-            ModelCatalogList.Items.Add(BuildCatalogRow(entry));
+            var slashIdx = modelId.IndexOf('/');
+            var shortName = slashIdx > 0 ? modelId[(slashIdx + 1)..] : modelId;
+            var specs = EstimateModelSpecs(modelId);
+            var adHoc = new ModelCatalog.Entry(
+                Id: modelId,
+                ShortName: shortName,
+                Tag: "installed",
+                Label: shortName,
+                SizeApprox: specs.SizeApprox,
+                Rtf: specs.Rtf,
+                Hint: "");
+            ModelCatalogList.Items.Add(BuildCatalogRow(adHoc));
         }
+
+        // Wenn nichts installiert ist → kleiner Hinweis, dass die Suche darunter genutzt werden kann
+        ModelsEmptyHint.Visibility = _installedModels.Count == 0
+            ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private string _activeModelId = "";
@@ -665,12 +707,11 @@ public sealed partial class MainWindow : Window
         var L = App.Current.Loc;
         HfSearchResults.Items.Clear();
 
-        // Repos rausfiltern, die schon im kuratierten Katalog sind — Doppel vermeidet UI-Redundanz
-        var curated = new HashSet<string>(
-            ModelCatalog.All.Select(e => e.Id), StringComparer.OrdinalIgnoreCase);
+        // Schon installierte Modelle filtern — die werden oben in der "Whisper-Cache"-Sektion gezeigt
+        var hidden = new HashSet<string>(_installedModels, StringComparer.OrdinalIgnoreCase);
 
         var filtered = results
-            .Where(r => !curated.Contains(r.Id))
+            .Where(r => !hidden.Contains(r.Id))
             .ToList();
 
         if (filtered.Count == 0)
@@ -694,6 +735,8 @@ public sealed partial class MainWindow : Window
         var dim = (Brush)Application.Current.Resources["VATextDimBrush"];
         var text = (Brush)Application.Current.Resources["VATextBrush"];
         var ok = (Brush)Application.Current.Resources["VAOkBrush"];
+        var accent = (Brush)Application.Current.Resources["VAAccentBrush"];
+        var warn = (Brush)Application.Current.Resources["VAWarnBrush"];
         var monoFont = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["VAFontMono"];
 
         var card = new Border
@@ -708,38 +751,125 @@ public sealed partial class MainWindow : Window
         };
         var stack = new StackPanel { Spacing = 4 };
 
-        // Repo-ID — org gedimmt, Name betont
+        // Repo-ID als anklickbarer Bereich → öffnet HuggingFace-Modell-Seite
         var slashIdx = r.Id.IndexOf('/');
         var org = slashIdx > 0 ? r.Id[..slashIdx] : "";
         var name = slashIdx > 0 ? r.Id[(slashIdx + 1)..] : r.Id;
-        var idRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 0 };
+
+        var idPanel = new StackPanel { Spacing = 0 };
         if (!string.IsNullOrEmpty(org))
         {
-            idRow.Children.Add(new TextBlock
+            idPanel.Children.Add(new TextBlock
             {
-                Text = org + "/", FontFamily = monoFont, FontSize = 11, Foreground = mute,
+                Text = org + "/", FontFamily = monoFont, FontSize = 10.5,
+                Foreground = mute, TextWrapping = TextWrapping.NoWrap,
+                TextTrimming = TextTrimming.CharacterEllipsis,
             });
         }
-        idRow.Children.Add(new TextBlock
+        var nameRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal, Spacing = 6,
+        };
+        nameRow.Children.Add(new TextBlock
         {
             Text = name, FontFamily = monoFont, FontSize = 12.5,
-            FontWeight = Microsoft.UI.Text.FontWeights.Medium, Foreground = text,
-            TextTrimming = TextTrimming.CharacterEllipsis,
+            FontWeight = Microsoft.UI.Text.FontWeights.Medium, Foreground = accent,
+            TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center,
         });
-        stack.Children.Add(idRow);
+        // Kleines "open-in-new"-Glyph als visueller Link-Hinweis (Segoe MDL2: OpenInNewWindow = E8A7)
+        nameRow.Children.Add(new FontIcon
+        {
+            Glyph = "", FontSize = 10,
+            Foreground = mute, VerticalAlignment = VerticalAlignment.Center,
+        });
+        idPanel.Children.Add(nameRow);
+
+        // Klick auf den Namen → HF-Seite im Default-Browser
+        var linkButton = new Button
+        {
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            Content = idPanel,
+        };
+        ToolTipService.SetToolTip(linkButton,
+            string.Format(L.T("HfSearch.OpenOnHfFmt"), r.Id));
+        linkButton.Click += async (_, _) =>
+        {
+            try
+            {
+                var uri = new Uri($"https://huggingface.co/{r.Id}");
+                await Windows.System.Launcher.LaunchUriAsync(uri);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn("HF link launch failed: " + ex.Message);
+            }
+        };
+        stack.Children.Add(linkButton);
+
+        // Heuristische Schätzung: Modellgröße + RTF aus dem Namen ableiten
+        var specs = EstimateModelSpecs(r.Id);
 
         // Stats: Downloads + Likes
-        var statsText = string.Format(
-            L.T("HfSearch.StatsFmt"),
-            FormatCount(r.Downloads),
-            FormatCount(r.Likes));
         stack.Children.Add(new TextBlock
         {
-            Text = statsText, FontFamily = monoFont, FontSize = 10.5, Foreground = dim,
-            Margin = new Thickness(0, 4, 0, 0),
+            Text = string.Format(L.T("HfSearch.StatsFmt"),
+                                 FormatCount(r.Downloads), FormatCount(r.Likes)),
+            FontFamily = monoFont, FontSize = 10.5, Foreground = dim,
+            Margin = new Thickness(0, 6, 0, 0),
         });
 
-        // Tags — nur die relevanten, max 3
+        // Size + RTF (genau wie in BuildCatalogRow)
+        var metaRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal, Spacing = 12,
+            Margin = new Thickness(0, 4, 0, 0),
+        };
+        metaRow.Children.Add(new TextBlock
+        {
+            Text = specs.SizeApprox, FontFamily = monoFont, FontSize = 11, Foreground = dim,
+        });
+        metaRow.Children.Add(new TextBlock
+        {
+            Text = $"RTF {specs.Rtf:F2}×", FontFamily = monoFont, FontSize = 11, Foreground = dim,
+        });
+        stack.Children.Add(metaRow);
+
+        // RTF-Bar
+        var rtfTrack = new Border
+        {
+            Height = 3, CornerRadius = new CornerRadius(2),
+            Background = borderSoft, Margin = new Thickness(0, 4, 0, 0),
+        };
+        var fillWidth = Math.Min(100.0, specs.Rtf * 30 + 10) / 100.0;
+        var rtfFillContainer = new Grid();
+        rtfFillContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(fillWidth, GridUnitType.Star) });
+        rtfFillContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - fillWidth, GridUnitType.Star) });
+        var rtfFill = new Border
+        {
+            Background = specs.Rtf > 1.5 ? warn : (specs.Rtf > 0.8 ? accent : ok),
+            CornerRadius = new CornerRadius(2),
+        };
+        Grid.SetColumn(rtfFill, 0);
+        rtfFillContainer.Children.Add(rtfFill);
+        rtfTrack.Child = rtfFillContainer;
+        stack.Children.Add(rtfTrack);
+
+        // VRAM-Schätzung
+        if (!string.IsNullOrEmpty(specs.VramHint))
+        {
+            stack.Children.Add(new TextBlock
+            {
+                Text = specs.VramHint, FontFamily = monoFont, FontSize = 10.5,
+                Foreground = mute, Margin = new Thickness(0, 6, 0, 0),
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+
+        // Tags — max 3, gefiltert
         if (r.Tags is { Length: > 0 })
         {
             var relevant = r.Tags
@@ -753,7 +883,7 @@ public sealed partial class MainWindow : Window
                 {
                     Text = string.Join(" · ", relevant),
                     FontFamily = monoFont, FontSize = 10, Foreground = mute,
-                    Margin = new Thickness(0, 2, 0, 0),
+                    Margin = new Thickness(0, 4, 0, 0),
                     TextTrimming = TextTrimming.CharacterEllipsis,
                 });
             }
@@ -782,14 +912,13 @@ public sealed partial class MainWindow : Window
                 Padding = new Thickness(10, 4, 10, 4),
                 FontSize = 11,
             };
-            // Wir bauen einen "ad-hoc"-Catalog-Entry, damit der bestehende Install-Flow wiederverwendbar bleibt.
             var adHocEntry = new ModelCatalog.Entry(
                 Id: r.Id,
                 ShortName: name,
                 Tag: "huggingface",
                 Label: name,
-                SizeApprox: "?",
-                Rtf: 1.0,
+                SizeApprox: specs.SizeApprox,
+                Rtf: specs.Rtf,
                 Hint: "");
             btn.Click += async (_, _) => await InstallModelAsync(adHocEntry, btn, progress);
             actionRow.Children.Add(progress);
@@ -800,6 +929,44 @@ public sealed partial class MainWindow : Window
         card.Child = stack;
         return card;
     }
+
+    /// <summary>
+    /// Schätzt Modell-Größe (Repo auf Disk) + RTF + VRAM-Verbrauch heuristisch aus dem Repo-Namen.
+    /// Keine echten Werte, aber für faster-whisper-Modelle reicht die Naming-Convention.
+    /// </summary>
+    private static (string SizeApprox, double Rtf, string VramHint) EstimateModelSpecs(string id)
+    {
+        var L = App.Current.Loc;
+        var n = id.ToLowerInvariant();
+        bool isDistil = n.Contains("distil");
+        bool isTurbo = n.Contains("turbo");
+
+        // Reihenfolge: spezifischere Matches zuerst
+        if (n.Contains("large") && isTurbo)
+            return ("~1.5 GB", 0.80, FormatVram(L, 1.2));
+        if (isDistil && n.Contains("large"))
+            return ("~1.5 GB", 1.10, FormatVram(L, 0.9));
+        if (n.Contains("large"))
+            return ("~3 GB", 3.10, FormatVram(L, 1.6));
+        if (isDistil && n.Contains("medium"))
+            return ("~0.8 GB", 0.70, FormatVram(L, 0.5));
+        if (n.Contains("medium"))
+            return ("~1.5 GB", 0.91, FormatVram(L, 0.8));
+        if (isDistil && n.Contains("small"))
+            return ("~0.4 GB", 0.40, FormatVram(L, 0.3));
+        if (n.Contains("small"))
+            return ("~0.5 GB", 0.55, FormatVram(L, 0.3));
+        if (n.Contains("base"))
+            return ("~150 MB", 0.25, FormatVram(L, 0.12));
+        if (n.Contains("tiny"))
+            return ("~75 MB", 0.15, FormatVram(L, 0.07));
+
+        return ("?", 1.0, L.T("HfSearch.UnknownSize"));
+    }
+
+    private static string FormatVram(LocalizationService L, double gb) =>
+        string.Format(L.T("HfSearch.VramFmt"),
+            gb >= 1 ? $"~{gb:F1} GB" : $"~{(int)(gb * 1000)} MB");
 
     private static string FormatCount(int n) => n switch
     {
@@ -1457,6 +1624,7 @@ public sealed partial class MainWindow : Window
         HfSearchSectionLabel.Text = L.T("HfSearch.Section");
         HfSearchHint.Text = L.T("HfSearch.Hint");
         HfSearchBox.PlaceholderText = L.T("HfSearch.Placeholder");
+        ModelsEmptyHint.Text = L.T("Models.EmptyHint");
 
         // ----- Settings: vertikale Sub-Nav -----
         SettingsSectionLabel.Text = L.T("Settings.Section");

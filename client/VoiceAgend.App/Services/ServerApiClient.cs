@@ -17,7 +17,8 @@ public sealed class ServerApiClient
         [property: JsonPropertyName("api_key_name")] string ApiKeyName,
         [property: JsonPropertyName("model")] string? Model,
         [property: JsonPropertyName("prompt")] string? Prompt,
-        [property: JsonPropertyName("temperature")] double Temperature);
+        [property: JsonPropertyName("temperature")] double Temperature,
+        [property: JsonPropertyName("server_default_model")] string? ServerDefaultModel = null);
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 

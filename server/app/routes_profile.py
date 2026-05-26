@@ -26,6 +26,9 @@ class ProfileOut(BaseModel):
     model: str | None
     prompt: str | None
     temperature: float
+    # Gateway-Fallback (env WHISPER_MODEL) — wird verwendet, wenn profile.model = NULL.
+    # Der Client braucht das, um zu prüfen, ob der "Server-Default" überhaupt installiert ist.
+    server_default_model: str | None = None
 
 
 class ProfileUpdate(BaseModel):
@@ -148,4 +151,5 @@ async def _profile_for(api_key: ApiKey, db: AsyncSession) -> ProfileOut:
         model=p.model,
         prompt=p.prompt,
         temperature=p.temperature,
+        server_default_model=settings.whisper_model or None,
     )

@@ -12,35 +12,10 @@ public static class ModelCatalog
         double Rtf,
         string Hint);
 
-    /// <summary>Hint-Keys werden zur Anzeige durch LocalizationService aufgelöst.</summary>
-    public static IReadOnlyList<Entry> All { get; } = new[]
-    {
-        new Entry("Systran/faster-whisper-tiny",
-            "tiny", "multilingual",
-            "Tiny", "~75 MB", 0.15, "Models.Hint.Tiny"),
-
-        new Entry("Systran/faster-whisper-base",
-            "base", "multilingual",
-            "Base", "~150 MB", 0.25, "Models.Hint.Base"),
-
-        new Entry("Systran/faster-whisper-small",
-            "small", "multilingual",
-            "Small", "~500 MB", 0.55, "Models.Hint.Small"),
-
-        new Entry("Systran/faster-whisper-medium",
-            "medium", "multilingual",
-            "Medium", "~1.5 GB", 0.91, "Models.Hint.Medium"),
-
-        new Entry("Systran/faster-whisper-large-v3",
-            "large-v3", "multilingual",
-            "Large v3", "~3 GB", 3.10, "Models.Hint.LargeV3"),
-
-        new Entry("Systran/faster-whisper-large-v3-turbo",
-            "large-v3-turbo", "multilingual",
-            "Large v3 Turbo", "~1.5 GB", 0.80, "Models.Hint.LargeV3Turbo"),
-
-        new Entry("Systran/faster-distil-whisper-large-v3",
-            "distil-large-v3", "english",
-            "Distil-Large v3", "~1.5 GB", 1.10, "Models.Hint.DistilLargeV3"),
-    };
+    /// <summary>
+    /// Leer — vordefinierte Liste wurde entfernt. Stattdessen werden die tatsächlich
+    /// installierten Modelle des Servers oben angezeigt; weitere Modelle findet man
+    /// über die HuggingFace-Suche darunter.
+    /// </summary>
+    public static IReadOnlyList<Entry> All { get; } = Array.Empty<Entry>();
 }
