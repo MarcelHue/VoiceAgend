@@ -975,6 +975,82 @@ public sealed partial class MainWindow : Window
         _ => n.ToString(),
     };
 
+    // ============== Audio-File-Upload (Drag & Drop + Browse) ==============
+
+    private static readonly string[] _supportedAudioExts =
+    {
+        ".wav", ".mp3", ".m4a", ".mp4", ".ogg", ".opus", ".flac", ".aac", ".webm", ".wma",
+    };
+
+    private void OnUploadDragOver(object sender, DragEventArgs e)
+    {
+        if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
+        {
+            e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
+            // Visual: leichte Akzent-Border, damit klar ist "hier kann ich ablegen"
+            UploadDropZone.BorderBrush = (Brush)Application.Current.Resources["VAAccentBrush"];
+            if (e.DragUIOverride is not null)
+            {
+                e.DragUIOverride.Caption = App.Current.Loc.T("Upload.DropHint");
+                e.DragUIOverride.IsCaptionVisible = true;
+            }
+        }
+        else
+        {
+            e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.None;
+        }
+        e.Handled = true;
+    }
+
+    private async void OnUploadDrop(object sender, DragEventArgs e)
+    {
+        UploadDropZone.BorderBrush = (Brush)Application.Current.Resources["VABorderSoftBrush"];
+        if (!e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
+            return;
+        var items = await e.DataView.GetStorageItemsAsync();
+        var file = items.OfType<Windows.Storage.StorageFile>()
+                        .FirstOrDefault(f => _supportedAudioExts.Contains(
+                            System.IO.Path.GetExtension(f.Name).ToLowerInvariant()));
+        if (file is null)
+        {
+            HomeStatus.Text = App.Current.Loc.T("Upload.UnsupportedFormat");
+            return;
+        }
+        await StartUploadAsync(file.Path);
+    }
+
+    private async void OnUploadBrowse(object sender, RoutedEventArgs e)
+    {
+        var picker = new Windows.Storage.Pickers.FileOpenPicker();
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+        picker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;
+        picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.MusicLibrary;
+        foreach (var ext in _supportedAudioExts) picker.FileTypeFilter.Add(ext);
+
+        var file = await picker.PickSingleFileAsync();
+        if (file is null) return;
+        await StartUploadAsync(file.Path);
+    }
+
+    private async void OnUploadBrowse(object sender, TappedRoutedEventArgs e)
+    {
+        // Tap auf die DropZone (außerhalb des Browse-Buttons) öffnet ebenfalls den Picker
+        if (e.OriginalSource is Button) return;
+        await Task.Yield();
+        OnUploadBrowse((object)this, new RoutedEventArgs());
+    }
+
+    private async Task StartUploadAsync(string path)
+    {
+        if (App.Current.Coordinator.IsBusy || App.Current.Coordinator.IsRecording)
+        {
+            HomeStatus.Text = App.Current.Loc.T("Upload.BusyHint");
+            return;
+        }
+        await App.Current.Coordinator.TranscribeFileAsync(path);
+    }
+
     private async void OnProfileSave(object sender, RoutedEventArgs e)
     {
         var s = App.Current.Settings;
@@ -1596,6 +1672,9 @@ public sealed partial class MainWindow : Window
             ((ComboBoxItem)HomeOutputModeCombo.Items[4]).Content = L.T("Settings.OutputMode.Notification");
         }
         TranscriptSectionLabel.Text = L.T("Home.Title");
+        UploadHeadline.Text = L.T("Upload.Headline");
+        UploadSubline.Text = L.T("Upload.Subline");
+        UploadBrowseButton.Content = L.T("Upload.Btn.Browse");
         HistoryLabel.Text = L.T("Home.History.Label");
         HistoryFilter.PlaceholderText = L.T("Home.History.FilterPlaceholder");
         PromptPreviewLabel.Text = L.T("Home.Prompt.Label");

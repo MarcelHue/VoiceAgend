@@ -292,13 +292,47 @@
 
                                 <Border Grid.Row="3" BorderBrush="{ThemeResource VABorderSoftBrush}"
                                         BorderThickness="0,1,0,0" Padding="0,10,0,0">
-                                    <StackPanel Orientation="Horizontal" Spacing="16">
-                                        <TextBlock x:Name="TranscriptStatsWords"
-                                                   Style="{StaticResource VAMono}" FontSize="11"
-                                                   Foreground="{ThemeResource VATextMuteBrush}" />
-                                        <TextBlock x:Name="TranscriptStatsChars"
-                                                   Style="{StaticResource VAMono}" FontSize="11"
-                                                   Foreground="{ThemeResource VATextMuteBrush}" />
+                                    <StackPanel Spacing="10">
+                                        <StackPanel Orientation="Horizontal" Spacing="16">
+                                            <TextBlock x:Name="TranscriptStatsWords"
+                                                       Style="{StaticResource VAMono}" FontSize="11"
+                                                       Foreground="{ThemeResource VATextMuteBrush}" />
+                                            <TextBlock x:Name="TranscriptStatsChars"
+                                                       Style="{StaticResource VAMono}" FontSize="11"
+                                                       Foreground="{ThemeResource VATextMuteBrush}" />
+                                        </StackPanel>
+
+                                        <!-- Audio-Datei-Upload: Drag & Drop oder Datei-Picker -->
+                                        <Border x:Name="UploadDropZone"
+                                                AllowDrop="True"
+                                                DragOver="OnUploadDragOver"
+                                                Drop="OnUploadDrop"
+                                                Tapped="OnUploadBrowse"
+                                                BorderBrush="{ThemeResource VABorderSoftBrush}"
+                                                BorderThickness="1" CornerRadius="8"
+                                                Padding="14,12" Background="Transparent"
+                                                HorizontalAlignment="Stretch">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <FontIcon Grid.Column="0" Glyph="&#xE898;" FontSize="18"
+                                                          Foreground="{ThemeResource VATextDimBrush}"
+                                                          VerticalAlignment="Center" Margin="0,0,12,0" />
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                                    <TextBlock x:Name="UploadHeadline" FontSize="13"
+                                                               Foreground="{ThemeResource VATextBrush}" />
+                                                    <TextBlock x:Name="UploadSubline" FontSize="11"
+                                                               Foreground="{ThemeResource VATextMuteBrush}" />
+                                                </StackPanel>
+                                                <Button Grid.Column="2" x:Name="UploadBrowseButton"
+                                                        Click="OnUploadBrowse"
+                                                        Padding="12,4" FontSize="11"
+                                                        VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Border>
                                     </StackPanel>
                                 </Border>
                             </Grid>
