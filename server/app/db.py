@@ -41,6 +41,11 @@ class Profile(Base):
     api_key_id: Mapped[int] = mapped_column(ForeignKey("api_keys.id", ondelete="CASCADE"), unique=True)
     model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     prompt: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Sprach-spezifische Prompts — Whisper bias-t Sprachdetektion massiv über den Prompt,
+    # deshalb pro Recognition-Sprache ein eigenes Feld. Bei Auto-Modus wird gar kein Prompt
+    # gesendet. Das alte `prompt`-Feld bleibt als Legacy-Fallback.
+    prompt_de: Mapped[str | None] = mapped_column(String, nullable=True)
+    prompt_en: Mapped[str | None] = mapped_column(String, nullable=True)
     temperature: Mapped[float] = mapped_column(default=0.0)
     # Client-Settings als JSON-Blob (Theme, Hotkey, Output-Modus, …) damit der User
     # auf einem neuen Gerät seine Präferenzen automatisch zurückbekommt. Spalte ist
@@ -85,6 +90,10 @@ async def _migrate_profile_client_settings(conn) -> None:
         await conn.exec_driver_sql(
             "ALTER TABLE profiles ADD COLUMN client_settings_updated_at DATETIME"
         )
+    if "prompt_de" not in cols:
+        await conn.exec_driver_sql("ALTER TABLE profiles ADD COLUMN prompt_de TEXT")
+    if "prompt_en" not in cols:
+        await conn.exec_driver_sql("ALTER TABLE profiles ADD COLUMN prompt_en TEXT")
 
 
 async def get_session() -> AsyncSession:

@@ -525,14 +525,35 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
 
-                                <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Spacing="8">
+                                <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Spacing="12">
                                     <TextBlock x:Name="ProfilePromptLabel"
                                                Style="{StaticResource VASectionLabel}" />
-                                    <TextBox x:Name="ServerPromptBox"
-                                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"
-                                             FontFamily="{StaticResource VAFontMono}" FontSize="12.5" />
                                     <TextBlock x:Name="ProfilePromptHint" FontSize="11"
-                                               Foreground="{ThemeResource VATextMuteBrush}" />
+                                               Foreground="{ThemeResource VATextMuteBrush}"
+                                               TextWrapping="Wrap" />
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4">
+                                            <TextBlock x:Name="ProfilePromptDeLabel" FontSize="11"
+                                                       Foreground="{ThemeResource VATextDimBrush}" />
+                                            <TextBox x:Name="ServerPromptDeBox"
+                                                     AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"
+                                                     FontFamily="{StaticResource VAFontMono}" FontSize="12.5" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Spacing="4">
+                                            <TextBlock x:Name="ProfilePromptEnLabel" FontSize="11"
+                                                       Foreground="{ThemeResource VATextDimBrush}" />
+                                            <TextBox x:Name="ServerPromptEnBox"
+                                                     AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"
+                                                     FontFamily="{StaticResource VAFontMono}" FontSize="12.5" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <TextBlock x:Name="ProfilePromptAutoHint" FontSize="11"
+                                               Foreground="{ThemeResource VATextMuteBrush}"
+                                               TextWrapping="Wrap" FontStyle="Italic" />
                                 </StackPanel>
 
                                 <StackPanel Grid.Row="1" Grid.Column="0" Spacing="8">

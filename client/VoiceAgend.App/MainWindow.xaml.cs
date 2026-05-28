@@ -264,9 +264,31 @@ public sealed partial class MainWindow : Window
         {
             var baseUrl = ServerApiClient.ToHttpBase(s.ServerUrl);
             var p = await App.Current.ServerApi.GetProfileAsync(baseUrl, s.ApiKey);
-            DispatcherQueue.TryEnqueue(() => UpdatePromptPreview(p.Prompt));
+            var promptDe = p.PromptDe ?? "";
+            var promptEn = p.PromptEn ?? "";
+            // Legacy: ist noch nichts in DE/EN gepflegt, aber Legacy-Prompt vorhanden → als DE behandeln
+            if (string.IsNullOrWhiteSpace(promptDe) && string.IsNullOrWhiteSpace(promptEn))
+                promptDe = p.Prompt ?? "";
+            DispatcherQueue.TryEnqueue(() => UpdatePromptPreviewForCurrentLanguage(promptDe, promptEn));
         }
         catch (Exception ex) { Logger.Warn("PrefetchPromptPreview: " + ex.Message); }
+    }
+
+    /// <summary>
+    /// Wählt den Prompt entsprechend der aktuell eingestellten Spracherkennungs-Sprache.
+    /// Bei Auto-Modus wird kein Prompt gesendet (deshalb auch keine Vorschau), weil ein
+    /// Prompt sonst Whispers Sprachdetektion festnagelt.
+    /// </summary>
+    private void UpdatePromptPreviewForCurrentLanguage(string promptDe, string promptEn)
+    {
+        var lang = (App.Current.Settings.Language ?? "").ToLowerInvariant();
+        string? active = lang switch
+        {
+            "de" => promptDe,
+            "en" => promptEn,
+            _ => null, // Auto-Modus: kein Prompt
+        };
+        UpdatePromptPreview(active);
     }
 
     /// <summary>
@@ -671,8 +693,19 @@ public sealed partial class MainWindow : Window
                 var idx = ServerModelCombo.Items.IndexOf(p.Model);
                 ServerModelCombo.SelectedIndex = idx >= 0 ? idx : 0;
             }
-            ServerPromptBox.Text = p.Prompt ?? "";
-            UpdatePromptPreview(p.Prompt);
+            // Sprach-spezifische Prompts laden. Legacy: hat der User noch keinen DE-Prompt
+            // gesetzt, aber das alte `prompt`-Feld ist gefüllt → in DE migrieren (User ist
+            // laut Profil deutschsprachig). Persistiert wird das erst beim nächsten Save.
+            var promptDe = p.PromptDe ?? "";
+            var promptEn = p.PromptEn ?? "";
+            if (string.IsNullOrWhiteSpace(promptDe) && string.IsNullOrWhiteSpace(promptEn)
+                && !string.IsNullOrWhiteSpace(p.Prompt))
+            {
+                promptDe = p.Prompt!;
+            }
+            ServerPromptDeBox.Text = promptDe;
+            ServerPromptEnBox.Text = promptEn;
+            UpdatePromptPreviewForCurrentLanguage(promptDe, promptEn);
             ServerTempSlider.Value = p.Temperature;
             ServerTempLabel.Text = string.Format(App.Current.Loc.T("Profile.TempFmt"), p.Temperature);
 
@@ -1382,10 +1415,14 @@ public sealed partial class MainWindow : Window
             string? model = null;
             if (ServerModelCombo.SelectedItem is string m && ServerModelCombo.SelectedIndex > 0)
                 model = m;
-            var prompt = ServerPromptBox.Text;
+            var promptDe = ServerPromptDeBox.Text;
+            var promptEn = ServerPromptEnBox.Text;
             var temp = ServerTempSlider.Value;
-            await App.Current.ServerApi.UpdateProfileAsync(baseUrl, s.ApiKey, model ?? "", prompt, temp);
-            UpdatePromptPreview(prompt);
+            // Legacy `prompt`-Feld leeren — die Sprach-Varianten ersetzen es jetzt.
+            await App.Current.ServerApi.UpdateProfileAsync(
+                baseUrl, s.ApiKey, model ?? "", prompt: "", temperature: temp,
+                promptDe: promptDe, promptEn: promptEn);
+            UpdatePromptPreviewForCurrentLanguage(promptDe, promptEn);
             ProfileStatus.Text = string.Format(App.Current.Loc.T("Status.SavedFmt"), DateTime.Now);
         }
         catch (Exception ex)
@@ -1710,6 +1747,8 @@ public sealed partial class MainWindow : Window
         finally { _suppressAutoSave = false; }
         App.Current.SaveSettings();
         UpdateHeroState();
+        // Bei Sprachwechsel die Prompt-Vorschau passend aktualisieren
+        _ = PrefetchPromptPreviewAsync();
     }
 
     private void OnHomeOutputModeChanged(object sender, SelectionChangedEventArgs e)
@@ -2030,7 +2069,11 @@ public sealed partial class MainWindow : Window
         ProfileModelLabel.Text = L.T("Profile.Model");
         ProfilePromptLabel.Text = L.T("Profile.Prompt");
         ProfilePromptHint.Text = L.T("Profile.Prompt.Hint");
-        ServerPromptBox.PlaceholderText = L.T("Profile.Prompt.Placeholder");
+        ProfilePromptDeLabel.Text = L.T("Profile.Prompt.De");
+        ProfilePromptEnLabel.Text = L.T("Profile.Prompt.En");
+        ProfilePromptAutoHint.Text = L.T("Profile.Prompt.AutoHint");
+        ServerPromptDeBox.PlaceholderText = L.T("Profile.Prompt.PlaceholderDe");
+        ServerPromptEnBox.PlaceholderText = L.T("Profile.Prompt.PlaceholderEn");
         ProfileTempHint.Text = L.T("Profile.TempHint");
         ServerTempLabel.Text = string.Format(L.T("Profile.TempFmt"), ServerTempSlider.Value);
         ModelsSectionLabel.Text = L.T("Models.Section");

@@ -27,6 +27,8 @@ class ProfileOut(BaseModel):
     api_key_name: str
     model: str | None
     prompt: str | None
+    prompt_de: str | None = None
+    prompt_en: str | None = None
     temperature: float
     # Gateway-Fallback (env WHISPER_MODEL) — wird verwendet, wenn profile.model = NULL.
     # Der Client braucht das, um zu prüfen, ob der "Server-Default" überhaupt installiert ist.
@@ -40,6 +42,8 @@ class ProfileOut(BaseModel):
 class ProfileUpdate(BaseModel):
     model: str | None = Field(default=None, max_length=255)
     prompt: str | None = Field(default=None, max_length=4000)
+    prompt_de: str | None = Field(default=None, max_length=4000)
+    prompt_en: str | None = Field(default=None, max_length=4000)
     temperature: float | None = Field(default=None, ge=0.0, le=1.0)
     client_settings: dict[str, Any] | None = None
     # ISO-8601-Timestamp wann der Client diese Settings zuletzt geändert hat (UTC).
@@ -136,6 +140,10 @@ async def update_profile(
         profile.model = payload.model or None
     if payload.prompt is not None:
         profile.prompt = payload.prompt or None
+    if payload.prompt_de is not None:
+        profile.prompt_de = payload.prompt_de or None
+    if payload.prompt_en is not None:
+        profile.prompt_en = payload.prompt_en or None
     if payload.temperature is not None:
         profile.temperature = payload.temperature
     if payload.client_settings is not None:
@@ -177,6 +185,8 @@ async def _profile_for(api_key: ApiKey, db: AsyncSession) -> ProfileOut:
         api_key_name=api_key.name,
         model=p.model,
         prompt=p.prompt,
+        prompt_de=p.prompt_de,
+        prompt_en=p.prompt_en,
         temperature=p.temperature,
         server_default_model=settings.whisper_model or None,
         client_settings=client_settings,

@@ -19,6 +19,8 @@ public sealed class ServerApiClient
         [property: JsonPropertyName("prompt")] string? Prompt,
         [property: JsonPropertyName("temperature")] double Temperature,
         [property: JsonPropertyName("server_default_model")] string? ServerDefaultModel = null,
+        [property: JsonPropertyName("prompt_de")] string? PromptDe = null,
+        [property: JsonPropertyName("prompt_en")] string? PromptEn = null,
         [property: JsonPropertyName("client_settings")] JsonElement? ClientSettings = null,
         [property: JsonPropertyName("client_settings_updated_at")] DateTime? ClientSettingsUpdatedAt = null);
 
@@ -73,6 +75,7 @@ public sealed class ServerApiClient
     public async Task<Profile> UpdateProfileAsync(
         string baseUrl, string apiKey,
         string? model, string? prompt, double? temperature,
+        string? promptDe = null, string? promptEn = null,
         IDictionary<string, object?>? clientSettings = null,
         DateTime? clientSettingsUpdatedAtUtc = null,
         CancellationToken ct = default)
@@ -81,6 +84,8 @@ public sealed class ServerApiClient
         var payload = new Dictionary<string, object?>();
         if (model is not null) payload["model"] = model;
         if (prompt is not null) payload["prompt"] = prompt;
+        if (promptDe is not null) payload["prompt_de"] = promptDe;
+        if (promptEn is not null) payload["prompt_en"] = promptEn;
         if (temperature is not null) payload["temperature"] = temperature;
         if (clientSettings is not null) payload["client_settings"] = clientSettings;
         if (clientSettingsUpdatedAtUtc is not null)
