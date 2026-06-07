@@ -182,8 +182,14 @@ public sealed partial class MainWindow : Window
         MicCombo.Items.Add(new MicEntry(-1, "Standard (Windows-Default)"));
         foreach (var d in AudioCaptureService.ListDevices())
             MicCombo.Items.Add(new MicEntry(d.Number, d.Name));
-        MicCombo.SelectedIndex = MicCombo.Items.Cast<MicEntry>().ToList()
-            .FindIndex(e => e.Number == s.MicDeviceNumber);
+        // Erst per Name matchen — WaveIn-Device-Numbers sind nicht stabil
+        // über Reboots / USB-Plug-Events hinweg. Number nur als Fallback.
+        var entries = MicCombo.Items.Cast<MicEntry>().ToList();
+        var byName = !string.IsNullOrEmpty(s.MicDeviceName) && s.MicDeviceNumber >= 0
+            ? entries.FindIndex(e => e.Number >= 0 && e.Name == s.MicDeviceName)
+            : -1;
+        var byNumber = entries.FindIndex(e => e.Number == s.MicDeviceNumber);
+        MicCombo.SelectedIndex = byName >= 0 ? byName : byNumber;
         if (MicCombo.SelectedIndex < 0) MicCombo.SelectedIndex = 0;
 
         HotkeyDisplay.Text = s.HotkeyDisplay();
@@ -1676,8 +1682,17 @@ public sealed partial class MainWindow : Window
 
         if (MicCombo.SelectedItem is MicEntry mic)
         {
-            s.MicDeviceNumber = mic.Number;
-            s.MicDeviceName = mic.Name;
+            // Wenn die Auswahl auf den Standard-Fallback gefallen ist, obwohl ein
+            // konkretes Gerät gespeichert war, NICHT überschreiben — das Gerät
+            // ist diesmal nur nicht enumeriert (USB noch nicht ready, BT weg, …).
+            var fallbackToDefault = mic.Number < 0 && s.MicDeviceNumber >= 0;
+            var deviceMissing = mic.Number < 0 && !MicCombo.Items.Cast<MicEntry>()
+                .Any(e => e.Number >= 0 && e.Name == s.MicDeviceName);
+            if (!(fallbackToDefault && deviceMissing))
+            {
+                s.MicDeviceNumber = mic.Number;
+                s.MicDeviceName = mic.Name;
+            }
         }
 
         if (OutputModeCombo.SelectedItem is ComboBoxItem ci && ci.Tag is string tag &&
