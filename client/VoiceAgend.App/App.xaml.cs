@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Dispatching;
 using Microsoft.Windows.AppNotifications;
 using VoiceAgend.App.Models;
 using VoiceAgend.App.Services;
@@ -18,6 +19,7 @@ public partial class App : Application
     public ServerApiClient ServerApi { get; } = new();
     public HuggingFaceSearchClient HfSearch { get; } = new();
     public HotkeyManager Hotkey { get; } = new();
+    public MouseWheelHook WheelHook { get; }
     public UpdateService Updates { get; } = new();
     public WhatsNewService WhatsNew { get; } = new();
     public ProfileSyncService ProfileSync { get; } = new();
@@ -30,9 +32,19 @@ public partial class App : Application
     public HudWindow? HudWindow { get; private set; }
     public HudController? Hud { get; private set; }
 
+    /// <summary>Wird gefeuert, wenn die Erkennungssprache per Scroll-Geste geändert wurde
+    /// (für Combo-Refresh im MainWindow).</summary>
+    public event Action? RecognitionLanguageChanged;
+
+    // Sprachwechsel-Geste: true, sobald während eines gehaltenen Hotkeys gescrollt wurde →
+    // die laufende Aufnahme wird beim Loslassen verworfen statt hochgeladen.
+    private bool _pendingDiscard;
+    private DispatcherQueueTimer? _releasePoll;
+
     public App()
     {
         InitializeComponent();
+        WheelHook = new MouseWheelHook(() => (Settings.HotkeyModifiers, Settings.HotkeyVirtualKey));
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
@@ -60,6 +72,10 @@ public partial class App : Application
 
         Hotkey.Pressed += OnHotkeyPressed;
         ApplyHotkey();
+
+        // Sprachwechsel-Geste: Mausrad bei gehaltenem Hotkey → durch Sprachen zyklen.
+        WheelHook.Scrolled += OnHotkeyScroll;
+        WheelHook.Start();
 
         // Fenster immer aktivieren, damit Tray-Icon initialisiert wird.
         // User kann via "In Tray minimieren" verstecken.
@@ -137,7 +153,10 @@ public partial class App : Application
     public void ApplyHotkey()
     {
         if (Settings.HotkeyEnabled)
-            Hotkey.Register(Settings.HotkeyModifiers, Settings.HotkeyVirtualKey);
+            // MOD_NOREPEAT (0x4000): ohne das feuert RegisterHotKey beim Halten der Taste
+            // Auto-Repeat-WM_HOTKEY und würde die Aufnahme wiederholt togglen. Für die
+            // Halten+Scroll-Geste muss ein gehaltener Hotkey genau EIN Event auslösen.
+            Hotkey.Register(Settings.HotkeyModifiers | 0x4000, Settings.HotkeyVirtualKey);
         else
             Hotkey.Unregister();
     }
@@ -156,6 +175,86 @@ public partial class App : Application
     {
         try { await Coordinator.ToggleAsync(); }
         catch (Exception ex) { CrashHandler.Handle("Hotkey-Pressed", ex); }
+    }
+
+    /// <summary>
+    /// Mausrad bei gehaltenem Aufnahme-Hotkey: durch [Auto, de, en, …EnabledLanguages] zyklen.
+    /// Läuft auf dem Maus-Hook-Thread → auf den UI-Thread dispatchen.
+    /// </summary>
+    private void OnHotkeyScroll(int dir)
+    {
+        var dq = MainWindow?.DispatcherQueue;
+        if (dq is null) return;
+        dq.TryEnqueue(() =>
+        {
+            // Zyklusliste: Auto + de + en + aktivierte Zusatzsprachen (dedupliziert).
+            var cycle = new List<string> { "", "de", "en" };
+            foreach (var c in Settings.EnabledLanguages)
+            {
+                var lc = (c ?? "").ToLowerInvariant();
+                if (lc is "" or "de" or "en") continue;
+                if (!cycle.Contains(lc)) cycle.Add(lc);
+            }
+
+            var idx = cycle.IndexOf((Settings.Language ?? "").ToLowerInvariant());
+            if (idx < 0) idx = 0;
+            idx = ((idx + dir) % cycle.Count + cycle.Count) % cycle.Count;
+            Settings.Language = cycle[idx];
+
+            // HUD-Live-Anzeige (force-show, auch wenn HudEnabled aus ist).
+            var disp = string.IsNullOrEmpty(Settings.Language)
+                ? Loc.T("Settings.Lang.Auto")
+                : LanguageNames.Display(Settings.Language, Settings.UiLanguage);
+            Hud?.ShowLanguage(disp);
+
+            // Combos im Fenster spiegeln.
+            RecognitionLanguageChanged?.Invoke();
+
+            // Die durch den Tastendruck gestartete Aufnahme soll verworfen werden. Unbedingt
+            // setzen (nicht nur bei IsRecording) — falls der Scroll knapp vor dem Audio-Start
+            // eintrifft, greift Cancel() beim Loslassen trotzdem; ohne Aufnahme ist es ein No-op.
+            _pendingDiscard = true;
+
+            StartReleasePoller(dq);
+        });
+    }
+
+    private void StartReleasePoller(DispatcherQueue dq)
+    {
+        if (_releasePoll is not null) return;
+        _releasePoll = dq.CreateTimer();
+        _releasePoll.Interval = TimeSpan.FromMilliseconds(40);
+        _releasePoll.Tick += (t, _) =>
+        {
+            // Warten, bis die Haupttaste des Hotkeys losgelassen wird.
+            if (MouseWheelHook.IsKeyDown(Settings.HotkeyVirtualKey)) return;
+            t.Stop();
+            _releasePoll = null;
+            OnGestureReleased();
+        };
+        _releasePoll.Start();
+    }
+
+    private void OnGestureReleased()
+    {
+        // Gewählte Sprache dauerhaft sichern (einmalig, nicht bei jedem Scroll-Tick).
+        SaveSettings();
+
+        if (_pendingDiscard)
+        {
+            _pendingDiscard = false;
+            Coordinator.Cancel(); // Audio verwerfen, kein Upload
+        }
+
+        // HUD nach kurzer Anzeige ausblenden.
+        var dq = MainWindow?.DispatcherQueue;
+        if (dq is not null)
+        {
+            var hide = dq.CreateTimer();
+            hide.Interval = TimeSpan.FromMilliseconds(700);
+            hide.Tick += (t, _) => { t.Stop(); Hud?.Hide(); };
+            hide.Start();
+        }
     }
 
     private bool _toastShownForVersion;

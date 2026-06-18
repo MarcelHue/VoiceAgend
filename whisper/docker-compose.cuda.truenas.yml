@@ -22,15 +22,18 @@ services:
       - /mnt/HDDs/Applications/speaches/config:/config
     environment:
       # Empfehlung pro VRAM:
-      #   ≥6 GB  → large-v3 mit float16  (~5 GB VRAM, höchste Qualität, ~5–8× Echtzeit)
-      #   ≥4 GB  → medium mit float16    (~3 GB VRAM, sehr schnell, ~15× Echtzeit)
-      #   ≤4 GB  → small/medium mit int8_float16 (~1.5–2 GB VRAM)
-      WHISPER__MODEL: Systran/faster-whisper-large-v3
-      WHISPER__COMPUTE_TYPE: float16
+      #   ≥6 GB  → large-v3-turbo + int8_float16  (~1.2 GB VRAM, multilingual, ~4× schneller als large-v3)
+      #   ≥4 GB  → medium + int8_float16          (~0.8 GB VRAM)
+      #   ≤4 GB  → small + int8_float16           (~0.3 GB VRAM)
+      WHISPER__MODEL: Systran/faster-whisper-large-v3-turbo
+      WHISPER__COMPUTE_TYPE: int8_float16
       WHISPER__INFERENCE_DEVICE: cuda
       WHISPER__NUM_WORKERS: "1"
       # Anti-Halluzination: nicht auf vorherige Segmente konditionieren
       WHISPER__CONDITION_ON_PREVIOUS_TEXT: "false"
+      # Modell PERMANENT im VRAM halten — sonst kalt-loaden ~7-10 s
+      # nach Idle-Zeit. Bei ~1.2 GB / 8 GB GPU völlig vertretbar.
+      WHISPER__TTL: "-1"
       ENABLE_UI: "true"
       LOG_LEVEL: info
       # Optional: API-Key-Schutz aktivieren (sonst offen für jeden im LAN)

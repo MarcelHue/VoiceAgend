@@ -33,6 +33,13 @@ public sealed class AppSettings
     public string ApiKey { get; set; } = "";
     public string Language { get; set; } = "";
 
+    /// <summary>
+    /// Zusätzlich zu Deutsch/Englisch aktivierte Spracherkennungs-Sprachen (ISO-Codes).
+    /// Erscheinen im Sprach-Dropdown und können je einen eigenen Server-Prompt haben.
+    /// Wird über das Server-Profil (client_settings) zwischen Geräten synchronisiert.
+    /// </summary>
+    public List<string> EnabledLanguages { get; set; } = new();
+
     /// <summary>UI-Sprache (eigenständig von der Spracherkennungs-Sprache).</summary>
     public string UiLanguage { get; set; } = "de";
 

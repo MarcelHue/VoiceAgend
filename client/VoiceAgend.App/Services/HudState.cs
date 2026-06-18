@@ -8,4 +8,6 @@ public enum HudState
     Processing,
     Done,
     Error,
+    /// <summary>Sprachwechsel-Geste (Hotkey halten + scrollen): zeigt die gewählte Sprache.</summary>
+    LanguageSwitch,
 }

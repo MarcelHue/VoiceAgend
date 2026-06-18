@@ -13,3 +13,8 @@ bin/
 obj/
 publish/
 releases/
+LocalScripts/
+
+# OmniVoice TTS lives in its own standalone repo (github.com/MarcelHue/Custom-OmniVoice).
+# Kept locally inside this tree for convenience but NOT part of the VoiceAgend repo.
+omnivoice/

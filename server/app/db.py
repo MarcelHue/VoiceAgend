@@ -46,6 +46,10 @@ class Profile(Base):
     # gesendet. Das alte `prompt`-Feld bleibt als Legacy-Fallback.
     prompt_de: Mapped[str | None] = mapped_column(String, nullable=True)
     prompt_en: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Prompts für zusätzlich aktivierte Sprachen jenseits von de/en, als JSON-Map
+    # {"fr": "...", "es": "..."}. de/en bleiben in ihren eigenen Spalten (keine
+    # Spiegelung), damit das bestehende Transcribe-Verhalten unverändert bleibt.
+    language_prompts: Mapped[str | None] = mapped_column(Text, nullable=True)
     temperature: Mapped[float] = mapped_column(default=0.0)
     # Client-Settings als JSON-Blob (Theme, Hotkey, Output-Modus, …) damit der User
     # auf einem neuen Gerät seine Präferenzen automatisch zurückbekommt. Spalte ist
@@ -55,6 +59,20 @@ class Profile(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     api_key: Mapped[ApiKey] = relationship(back_populates="profile")
+
+
+class ModelLanguages(Base):
+    """Cache der pro Whisper-Modell unterstützten Sprachen.
+
+    Wird einmalig über die HuggingFace-API befüllt (siehe routes_profile) und
+    danach vom eigenen Server an alle Clients verteilt, damit nicht jeder Client
+    HuggingFace anfragen muss.
+    """
+    __tablename__ = "model_languages"
+    model_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    languages_json: Mapped[str] = mapped_column(Text)  # JSON-Array von ISO-Codes
+    source: Mapped[str] = mapped_column(String(16))  # "huggingface" | "fallback"
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class Transcription(Base):
@@ -94,6 +112,8 @@ async def _migrate_profile_client_settings(conn) -> None:
         await conn.exec_driver_sql("ALTER TABLE profiles ADD COLUMN prompt_de TEXT")
     if "prompt_en" not in cols:
         await conn.exec_driver_sql("ALTER TABLE profiles ADD COLUMN prompt_en TEXT")
+    if "language_prompts" not in cols:
+        await conn.exec_driver_sql("ALTER TABLE profiles ADD COLUMN language_prompts TEXT")
 
 
 async def get_session() -> AsyncSession:

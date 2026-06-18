@@ -58,6 +58,7 @@ async def ws_transcribe(ws: WebSocket):
         await ws.send_json({"status": "processing"})
 
         # Sprach-abhängige Prompt-Auswahl:
+        # - language_prompts[lang] → Prompt für zusätzlich aktivierte Sprachen
         # - explizit "de" → prompt_de (Fallback: legacy prompt)
         # - explizit "en" → prompt_en (Fallback: legacy prompt)
         # - Auto-Modus (keine Sprache) → kein Prompt, damit Whisper neutral
@@ -66,7 +67,16 @@ async def ws_transcribe(ws: WebSocket):
         chosen_prompt: str | None = None
         if profile is not None and language:
             lang_lc = language.lower()
-            if lang_lc == "de":
+            lang_map: dict = {}
+            if profile.language_prompts:
+                try:
+                    lang_map = json.loads(profile.language_prompts)
+                except (ValueError, TypeError):
+                    lang_map = {}
+            mapped = lang_map.get(lang_lc)
+            if mapped and mapped.strip():
+                chosen_prompt = mapped
+            elif lang_lc == "de":
                 chosen_prompt = profile.prompt_de or profile.prompt
             elif lang_lc == "en":
                 chosen_prompt = profile.prompt_en or profile.prompt

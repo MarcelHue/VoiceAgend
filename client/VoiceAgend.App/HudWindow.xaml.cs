@@ -246,6 +246,20 @@ public sealed partial class HudWindow : Window
                 _recStart = DateTime.MinValue;
                 Resize(460);
                 break;
+
+            case HudState.LanguageSwitch:
+                StateLabel.Text = L.T("Hud.State.Language");
+                StateLabel.Foreground = new SolidColorBrush(accent);
+                BadgeBg.Fill = new SolidColorBrush(accent);
+                BadgeIcon.Glyph = ""; // globe
+                BadgeIcon.Foreground = new SolidColorBrush(accent);
+                BadgeIcon.Visibility = Visibility.Visible;
+                StateValue.Text = statusText; // Sprach-Anzeigename
+                RightInfo.Foreground = new SolidColorBrush(ThemeColor("VATextMuteBrush"));
+                RightInfo.Text = L.T("Hud.HotkeyStop");
+                _recStart = DateTime.MinValue;
+                Resize(460);
+                break;
         }
     }
 

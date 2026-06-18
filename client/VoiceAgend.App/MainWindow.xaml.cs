@@ -1,4 +1,5 @@
 using System.IO;
+using System.Collections.ObjectModel;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -9,6 +10,7 @@ using System.Windows.Input;
 using Windows.System;
 using VoiceAgend.App.Models;
 using VoiceAgend.App.Services;
+using VoiceAgend.App.Views;
 
 
 namespace VoiceAgend.App;
@@ -135,6 +137,10 @@ public sealed partial class MainWindow : Window
                 finally { _suppressAutoSave = false; }
             });
 
+        // Sprachwechsel per Hotkey+Scroll → Dropdowns im Fenster aktualisieren.
+        App.Current.RecognitionLanguageChanged += () =>
+            DispatcherQueue.TryEnqueue(PopulateLanguageCombos);
+
         ShowWindowCommand = new RelayCommand(_ => Activate());
         ToggleCommand = new RelayCommand(async _ => await App.Current.Coordinator.ToggleAsync());
         QuitCommand = new RelayCommand(_ => DoQuit());
@@ -151,7 +157,8 @@ public sealed partial class MainWindow : Window
         // ein AutoSave, das die gerade gelesenen Settings mit halb-geladenen UI-Werten
         // überschreibt (HUD/Sounds verschwinden bei jedem App-Neustart).
         HotkeyEnabledToggle.IsOn = App.Current.Settings.HotkeyEnabled;
-        SetComboByTag(HomeLanguageCombo, App.Current.Settings.Language ?? "");
+        PromptLanguageList.ItemsSource = _promptLangs;
+        PopulateLanguageCombos();
         SetComboByTag(HomeOutputModeCombo, App.Current.Settings.OutputMode.ToString());
         ApplyLocalization();
         UpdateHeroState();
@@ -270,14 +277,30 @@ public sealed partial class MainWindow : Window
         {
             var baseUrl = ServerApiClient.ToHttpBase(s.ServerUrl);
             var p = await App.Current.ServerApi.GetProfileAsync(baseUrl, s.ApiKey);
-            var promptDe = p.PromptDe ?? "";
-            var promptEn = p.PromptEn ?? "";
-            // Legacy: ist noch nichts in DE/EN gepflegt, aber Legacy-Prompt vorhanden → als DE behandeln
-            if (string.IsNullOrWhiteSpace(promptDe) && string.IsNullOrWhiteSpace(promptEn))
-                promptDe = p.Prompt ?? "";
-            DispatcherQueue.TryEnqueue(() => UpdatePromptPreviewForCurrentLanguage(promptDe, promptEn));
+            var prompts = MergePrompts(p);
+            DispatcherQueue.TryEnqueue(() => UpdatePromptPreviewForCurrentLanguage(prompts));
         }
         catch (Exception ex) { Logger.Warn("PrefetchPromptPreview: " + ex.Message); }
+    }
+
+    /// <summary>
+    /// Baut die Sprache→Prompt-Map aus einem Profil: de/en aus ihren Spalten (mit
+    /// Legacy-Fallback auf das alte `prompt`-Feld als DE) plus die language_prompts.
+    /// </summary>
+    private static Dictionary<string, string> MergePrompts(ServerApiClient.Profile p)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var promptDe = p.PromptDe ?? "";
+        var promptEn = p.PromptEn ?? "";
+        if (string.IsNullOrWhiteSpace(promptDe) && string.IsNullOrWhiteSpace(promptEn)
+            && !string.IsNullOrWhiteSpace(p.Prompt))
+            promptDe = p.Prompt!;
+        map["de"] = promptDe;
+        map["en"] = promptEn;
+        if (p.LanguagePrompts is { } extra)
+            foreach (var kv in extra)
+                map[kv.Key] = kv.Value ?? "";
+        return map;
     }
 
     /// <summary>
@@ -285,15 +308,12 @@ public sealed partial class MainWindow : Window
     /// Bei Auto-Modus wird kein Prompt gesendet (deshalb auch keine Vorschau), weil ein
     /// Prompt sonst Whispers Sprachdetektion festnagelt.
     /// </summary>
-    private void UpdatePromptPreviewForCurrentLanguage(string promptDe, string promptEn)
+    private void UpdatePromptPreviewForCurrentLanguage(IReadOnlyDictionary<string, string> promptsByLang)
     {
         var lang = (App.Current.Settings.Language ?? "").ToLowerInvariant();
-        string? active = lang switch
-        {
-            "de" => promptDe,
-            "en" => promptEn,
-            _ => null, // Auto-Modus: kein Prompt
-        };
+        // Auto-Modus (leer) → kein Prompt.
+        string? active = !string.IsNullOrEmpty(lang) && promptsByLang.TryGetValue(lang, out var p)
+            ? p : null;
         UpdatePromptPreview(active);
     }
 
@@ -641,6 +661,10 @@ public sealed partial class MainWindow : Window
     private async void OnProfileLoad(object sender, RoutedEventArgs e) => await LoadProfileAsync(force: true);
 
     private HashSet<string> _installedModels = new();
+    // ItemsSource der Pro-Sprache-Prompt-Liste in der ProfileView (de/en + Zusatzsprachen).
+    private readonly ObservableCollection<PromptLangVm> _promptLangs = new();
+    // Effektives Modell (Profil-Auswahl oder Server-Default) — für den Sprach-Picker.
+    private string? _effectiveModelId;
 
     private async Task LoadProfileAsync(bool force = false)
     {
@@ -699,19 +723,25 @@ public sealed partial class MainWindow : Window
                 var idx = ServerModelCombo.Items.IndexOf(p.Model);
                 ServerModelCombo.SelectedIndex = idx >= 0 ? idx : 0;
             }
-            // Sprach-spezifische Prompts laden. Legacy: hat der User noch keinen DE-Prompt
-            // gesetzt, aber das alte `prompt`-Feld ist gefüllt → in DE migrieren (User ist
-            // laut Profil deutschsprachig). Persistiert wird das erst beim nächsten Save.
-            var promptDe = p.PromptDe ?? "";
-            var promptEn = p.PromptEn ?? "";
-            if (string.IsNullOrWhiteSpace(promptDe) && string.IsNullOrWhiteSpace(promptEn)
-                && !string.IsNullOrWhiteSpace(p.Prompt))
+            _effectiveModelId = string.IsNullOrEmpty(p.Model) ? p.ServerDefaultModel : p.Model;
+            // Sprach-spezifische Prompts laden. Legacy-Fallback (altes `prompt` → DE) macht
+            // MergePrompts. Sprachen, die serverseitig einen Prompt haben aber lokal noch
+            // nicht aktiviert sind (z.B. von einem anderen Gerät), in EnabledLanguages
+            // aufnehmen, damit sie im Dropdown und in der Liste erscheinen.
+            var prompts = MergePrompts(p);
+            if (p.LanguagePrompts is { } lp)
             {
-                promptDe = p.Prompt!;
+                var added = false;
+                foreach (var code in lp.Keys)
+                {
+                    var lc = code.ToLowerInvariant();
+                    if (lc is "de" or "en") continue;
+                    if (!s.EnabledLanguages.Contains(lc)) { s.EnabledLanguages.Add(lc); added = true; }
+                }
+                if (added) { App.Current.SaveSettings(); PopulateLanguageCombos(); }
             }
-            ServerPromptDeBox.Text = promptDe;
-            ServerPromptEnBox.Text = promptEn;
-            UpdatePromptPreviewForCurrentLanguage(promptDe, promptEn);
+            BuildPromptLangList(prompts);
+            UpdatePromptPreviewForCurrentLanguage(prompts);
             ServerTempSlider.Value = p.Temperature;
             ServerTempLabel.Text = string.Format(App.Current.Loc.T("Profile.TempFmt"), p.Temperature);
 
@@ -1421,14 +1451,18 @@ public sealed partial class MainWindow : Window
             string? model = null;
             if (ServerModelCombo.SelectedItem is string m && ServerModelCombo.SelectedIndex > 0)
                 model = m;
-            var promptDe = ServerPromptDeBox.Text;
-            var promptEn = ServerPromptEnBox.Text;
             var temp = ServerTempSlider.Value;
+            // de/en aus ihren VMs, alle übrigen Sprachen als language_prompts-Map.
+            var promptDe = _promptLangs.FirstOrDefault(v => v.Code == "de")?.Prompt ?? "";
+            var promptEn = _promptLangs.FirstOrDefault(v => v.Code == "en")?.Prompt ?? "";
+            var languagePrompts = _promptLangs
+                .Where(v => v.Code is not "de" and not "en")
+                .ToDictionary(v => v.Code, v => v.Prompt ?? "");
             // Legacy `prompt`-Feld leeren — die Sprach-Varianten ersetzen es jetzt.
-            await App.Current.ServerApi.UpdateProfileAsync(
+            var saved = await App.Current.ServerApi.UpdateProfileAsync(
                 baseUrl, s.ApiKey, model ?? "", prompt: "", temperature: temp,
-                promptDe: promptDe, promptEn: promptEn);
-            UpdatePromptPreviewForCurrentLanguage(promptDe, promptEn);
+                promptDe: promptDe, promptEn: promptEn, languagePrompts: languagePrompts);
+            UpdatePromptPreviewForCurrentLanguage(MergePrompts(saved));
             ProfileStatus.Text = string.Format(App.Current.Loc.T("Status.SavedFmt"), DateTime.Now);
         }
         catch (Exception ex)
@@ -1738,6 +1772,144 @@ public sealed partial class MainWindow : Window
         SetComboByTag(HomeLanguageCombo, lang ?? "");
     }
 
+    /// <summary>
+    /// Befüllt Home- und Settings-Sprach-Dropdown: Auto + de + en + aktivierte
+    /// Zusatzsprachen. Wird bei Lokalisierung, Profil-Load und Remote-Sync aufgerufen.
+    /// </summary>
+    private void PopulateLanguageCombos()
+    {
+        var s = App.Current.Settings;
+        var L = App.Current.Loc;
+        var ui = s.UiLanguage ?? "de";
+        var entries = new List<(string Tag, string Label)>
+        {
+            ("", L.T("Settings.Lang.Auto")),
+            ("de", L.T("Settings.Lang.De")),
+            ("en", L.T("Settings.Lang.En")),
+        };
+        foreach (var code in s.EnabledLanguages)
+        {
+            var lc = (code ?? "").ToLowerInvariant();
+            if (lc is "" or "de" or "en") continue;
+            if (entries.Any(e => e.Tag == lc)) continue;
+            entries.Add((lc, LanguageNames.Display(lc, ui)));
+        }
+
+        // Guard: das Neu-Befüllen feuert SelectionChanged → würde sonst AutoSave triggern.
+        var prev = _suppressAutoSave;
+        _suppressAutoSave = true;
+        try
+        {
+            FillLanguageCombo(HomeLanguageCombo, entries, s.Language ?? "");
+            FillLanguageCombo(LanguageCombo, entries, s.Language ?? "");
+        }
+        finally { _suppressAutoSave = prev; }
+    }
+
+    private static void FillLanguageCombo(
+        ComboBox combo, List<(string Tag, string Label)> entries, string selectedTag)
+    {
+        combo.Items.Clear();
+        foreach (var (tag, label) in entries)
+            combo.Items.Add(new ComboBoxItem { Tag = tag, Content = label });
+        SetComboByTag(combo, selectedTag);
+    }
+
+    /// <summary>
+    /// Baut die Pro-Sprache-Prompt-Liste der ProfileView: de/en (nicht entfernbar) plus
+    /// jede aktivierte Zusatzsprache. Prompt-Texte kommen aus der gemergten Profil-Map.
+    /// </summary>
+    private void BuildPromptLangList(IReadOnlyDictionary<string, string> prompts)
+    {
+        var s = App.Current.Settings;
+        var ui = s.UiLanguage ?? "de";
+        string Get(string code) => prompts.TryGetValue(code, out var v) ? v : "";
+        _promptLangs.Clear();
+        _promptLangs.Add(new PromptLangVm("de", LanguageNames.Display("de", ui), removable: false, Get("de")));
+        _promptLangs.Add(new PromptLangVm("en", LanguageNames.Display("en", ui), removable: false, Get("en")));
+        foreach (var code in s.EnabledLanguages)
+        {
+            var lc = (code ?? "").ToLowerInvariant();
+            if (lc is "" or "de" or "en") continue;
+            if (_promptLangs.Any(v => v.Code == lc)) continue;
+            _promptLangs.Add(new PromptLangVm(lc, LanguageNames.Display(lc, ui), removable: true, Get(lc)));
+        }
+    }
+
+    /// <summary>Öffnet einen Picker mit den vom Modell unterstützten, noch nicht aktiven Sprachen.</summary>
+    private async void OnAddPromptLang(object sender, RoutedEventArgs e)
+    {
+        var s = App.Current.Settings;
+        var L = App.Current.Loc;
+        if (string.IsNullOrWhiteSpace(s.ApiKey)) { ProfileStatus.Text = L.T("Profile.NoApiKey"); return; }
+        var ui = s.UiLanguage ?? "de";
+        var model = (ServerModelCombo.SelectedIndex > 0 && ServerModelCombo.SelectedItem is string sm)
+            ? sm : _effectiveModelId;
+
+        string[] langs;
+        try
+        {
+            var baseUrl = ServerApiClient.ToHttpBase(s.ServerUrl);
+            langs = string.IsNullOrEmpty(model)
+                ? System.Array.Empty<string>()
+                : (await App.Current.ServerApi.GetModelLanguagesAsync(baseUrl, s.ApiKey, model!)).Languages;
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn("Model languages: " + ex.Message);
+            langs = System.Array.Empty<string>();
+        }
+
+        // de/en und bereits aktivierte rausfiltern.
+        var active = new HashSet<string>(
+            s.EnabledLanguages.Select(c => (c ?? "").ToLowerInvariant())) { "de", "en" };
+        var choices = langs
+            .Select(c => (c ?? "").ToLowerInvariant())
+            .Where(c => c.Length > 0 && !active.Contains(c))
+            .Distinct()
+            .OrderBy(c => LanguageNames.Display(c, ui), StringComparer.CurrentCulture)
+            .ToList();
+        if (choices.Count == 0) { ProfileStatus.Text = L.T("Profile.Lang.NoneAvailable"); return; }
+
+        var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
+        foreach (var c in choices)
+            combo.Items.Add(new ComboBoxItem { Tag = c, Content = LanguageNames.Display(c, ui) });
+        combo.SelectedIndex = 0;
+
+        var dialog = new ContentDialog
+        {
+            Title = L.T("Profile.Lang.Picker.Title"),
+            Content = combo,
+            PrimaryButtonText = L.T("Profile.Lang.Add"),
+            CloseButtonText = L.T("Models.Btn.Cancel"),
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        if (combo.SelectedItem is not ComboBoxItem ci || ci.Tag is not string code) return;
+
+        s.EnabledLanguages.Add(code);
+        App.Current.SaveSettings(); // persistiert + ProfileSync.SchedulePush()
+        _promptLangs.Add(new PromptLangVm(code, LanguageNames.Display(code, ui), removable: true, ""));
+        PopulateLanguageCombos();
+    }
+
+    /// <summary>Entfernt eine Zusatzsprache (de/en sind nicht entfernbar).</summary>
+    private void OnRemovePromptLang(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button b || b.Tag is not string code) return;
+        var lc = code.ToLowerInvariant();
+        if (lc is "de" or "en") return;
+        var s = App.Current.Settings;
+        s.EnabledLanguages.RemoveAll(c => (c ?? "").ToLowerInvariant() == lc);
+        // Falls die entfernte Sprache gerade ausgewählt war → zurück auf Auto.
+        if ((s.Language ?? "").ToLowerInvariant() == lc) s.Language = "";
+        App.Current.SaveSettings();
+        var vm = _promptLangs.FirstOrDefault(v => v.Code == lc);
+        if (vm is not null) _promptLangs.Remove(vm);
+        PopulateLanguageCombos();
+    }
+
     private static void SetComboByTag(ComboBox combo, string tag)
     {
         foreach (ComboBoxItem item in combo.Items)
@@ -2045,12 +2217,8 @@ public sealed partial class MainWindow : Window
         TranscriptBox.PlaceholderText = L.T("Home.Placeholder");
         HotkeyEnabledLabel.Text = L.T("Home.HotkeyEnabled");
         HomeLanguageLabel.Text = L.T("Home.SpeechLanguage");
-        if (HomeLanguageCombo.Items.Count >= 3)
-        {
-            ((ComboBoxItem)HomeLanguageCombo.Items[0]).Content = L.T("Settings.Lang.Auto");
-            ((ComboBoxItem)HomeLanguageCombo.Items[1]).Content = L.T("Settings.Lang.De");
-            ((ComboBoxItem)HomeLanguageCombo.Items[2]).Content = L.T("Settings.Lang.En");
-        }
+        // Beide Sprach-Dropdowns dynamisch (Auto + de/en + Zusatzsprachen, lokalisiert).
+        PopulateLanguageCombos();
         HomeOutputModeLabel.Text = L.T("Home.OutputMode");
         if (HomeOutputModeCombo.Items.Count >= 5)
         {
@@ -2084,11 +2252,8 @@ public sealed partial class MainWindow : Window
         ProfileModelLabel.Text = L.T("Profile.Model");
         ProfilePromptLabel.Text = L.T("Profile.Prompt");
         ProfilePromptHint.Text = L.T("Profile.Prompt.Hint");
-        ProfilePromptDeLabel.Text = L.T("Profile.Prompt.De");
-        ProfilePromptEnLabel.Text = L.T("Profile.Prompt.En");
         ProfilePromptAutoHint.Text = L.T("Profile.Prompt.AutoHint");
-        ServerPromptDeBox.PlaceholderText = L.T("Profile.Prompt.PlaceholderDe");
-        ServerPromptEnBox.PlaceholderText = L.T("Profile.Prompt.PlaceholderEn");
+        AddPromptLangButton.Content = L.T("Profile.Lang.Add");
         ProfileTempHint.Text = L.T("Profile.TempHint");
         ServerTempLabel.Text = string.Format(L.T("Profile.TempFmt"), ServerTempSlider.Value);
         ModelsSectionLabel.Text = L.T("Models.Section");
@@ -2125,12 +2290,7 @@ public sealed partial class MainWindow : Window
         ServerUrlBox.PlaceholderText = "wss://va.example.com/ws/transcribe";
         ApiKeyLabel.Text = L.T("Settings.ApiKey");
         LanguageLabel.Text = L.T("Settings.Language");
-        if (LanguageCombo.Items.Count >= 3)
-        {
-            ((ComboBoxItem)LanguageCombo.Items[0]).Content = L.T("Settings.Lang.Auto");
-            ((ComboBoxItem)LanguageCombo.Items[1]).Content = L.T("Settings.Lang.De");
-            ((ComboBoxItem)LanguageCombo.Items[2]).Content = L.T("Settings.Lang.En");
-        }
+        // LanguageCombo wird zusammen mit HomeLanguageCombo in PopulateLanguageCombos() befüllt.
         LanguageAutoHint.Text = L.T("Settings.Lang.AutoHint");
         MicLabel.Text = L.T("Settings.Mic");
         HotkeyLabel.Text = L.T("Settings.Hotkey");

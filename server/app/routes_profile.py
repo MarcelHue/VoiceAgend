@@ -10,7 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
-from .db import ApiKey, Profile, User, get_session
+from .db import ApiKey, ModelLanguages, Profile, User, get_session
+from .languages import WHISPER_LANGUAGES, normalize_lang_codes
 from .security import require_api_key
 
 router = APIRouter(prefix="/api/v1", tags=["profile"])
@@ -22,6 +23,13 @@ class ModelOut(BaseModel):
     owned_by: str | None = None
 
 
+class ModelLanguagesOut(BaseModel):
+    model_id: str
+    languages: list[str]  # ISO-639-1-Codes
+    source: str  # "cache" | "huggingface" | "fallback"
+    fetched_at: datetime
+
+
 class ProfileOut(BaseModel):
     api_key_id: int
     api_key_name: str
@@ -29,6 +37,8 @@ class ProfileOut(BaseModel):
     prompt: str | None
     prompt_de: str | None = None
     prompt_en: str | None = None
+    # Prompts für zusätzlich aktivierte Sprachen (jenseits de/en) als Map {code: prompt}.
+    language_prompts: dict[str, str] | None = None
     temperature: float
     # Gateway-Fallback (env WHISPER_MODEL) — wird verwendet, wenn profile.model = NULL.
     # Der Client braucht das, um zu prüfen, ob der "Server-Default" überhaupt installiert ist.
@@ -44,6 +54,7 @@ class ProfileUpdate(BaseModel):
     prompt: str | None = Field(default=None, max_length=4000)
     prompt_de: str | None = Field(default=None, max_length=4000)
     prompt_en: str | None = Field(default=None, max_length=4000)
+    language_prompts: dict[str, str] | None = None
     temperature: float | None = Field(default=None, ge=0.0, le=1.0)
     client_settings: dict[str, Any] | None = None
     # ISO-8601-Timestamp wann der Client diese Settings zuletzt geändert hat (UTC).
@@ -119,6 +130,76 @@ def _whisper_headers() -> dict:
     return {"Authorization": f"Bearer {settings.whisper_api_key}"} if settings.whisper_api_key else {}
 
 
+@router.get("/models/{model_id:path}/languages", response_model=ModelLanguagesOut)
+async def model_languages(
+    model_id: str,
+    _: Annotated[tuple[ApiKey, User], Depends(require_api_key)],
+    db: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Liefert die vom Modell unterstützten Sprachen (ISO-Codes).
+
+    Es gibt keinen Speaches-Endpoint dafür. Wir fragen einmalig die HuggingFace-API
+    ab, cachen das Ergebnis pro Modell in der DB und verteilen es danach selbst.
+    Fallback auf die statische Whisper-Liste, wenn HF nichts Brauchbares liefert.
+    """
+    # 1) Cache-Hit
+    res = await db.execute(select(ModelLanguages).where(ModelLanguages.model_id == model_id))
+    cached = res.scalar_one_or_none()
+    if cached is not None:
+        try:
+            langs = json.loads(cached.languages_json)
+        except (ValueError, TypeError):
+            langs = list(WHISPER_LANGUAGES)
+        return ModelLanguagesOut(
+            model_id=model_id, languages=langs, source="cache", fetched_at=cached.fetched_at
+        )
+
+    # 2) HuggingFace abfragen. Slash im model_id muss encodiert werden, sonst routet
+    #    HF ins Leere. User-Agent ist Pflicht — ohne den antwortet HF mit 403.
+    encoded = quote(model_id, safe="")
+    langs: list[str] = []
+    source = "fallback"
+    persist = True
+    try:
+        async with httpx.AsyncClient(
+            timeout=10.0, headers={"User-Agent": "VoiceAgend/1.0"}
+        ) as c:
+            r = await c.get(f"https://huggingface.co/api/models/{encoded}")
+            if r.status_code == 200:
+                body = r.json()
+                card = body.get("cardData") or {}
+                langs = normalize_lang_codes(card.get("language") or card.get("languages"))
+                if not langs:
+                    langs = normalize_lang_codes(body.get("tags"))
+                if langs:
+                    source = "huggingface"
+            # 404 = Modell nicht auf HF (z.B. lokales Repo) → Fallback ist legitim, cachen ok.
+    except httpx.HTTPError:
+        # Transienter Netzwerkfehler → Fallback liefern, aber NICHT cachen, damit
+        # der nächste Aufruf es erneut versucht.
+        persist = False
+
+    if not langs:
+        langs = list(WHISPER_LANGUAGES)
+        source = "fallback"
+
+    fetched_at = datetime.utcnow()
+    if persist:
+        db.add(
+            ModelLanguages(
+                model_id=model_id,
+                languages_json=json.dumps(langs),
+                source=source,
+                fetched_at=fetched_at,
+            )
+        )
+        await db.commit()
+
+    return ModelLanguagesOut(
+        model_id=model_id, languages=langs, source=source, fetched_at=fetched_at
+    )
+
+
 @router.get("/profile", response_model=ProfileOut)
 async def get_profile(
     auth: Annotated[tuple[ApiKey, User], Depends(require_api_key)],
@@ -144,6 +225,14 @@ async def update_profile(
         profile.prompt_de = payload.prompt_de or None
     if payload.prompt_en is not None:
         profile.prompt_en = payload.prompt_en or None
+    if payload.language_prompts is not None:
+        # Leere Prompts rauswerfen; de/en gehören NICHT hier rein (eigene Spalten).
+        cleaned = {
+            k.lower(): v
+            for k, v in payload.language_prompts.items()
+            if v and v.strip() and k.lower() not in ("de", "en")
+        }
+        profile.language_prompts = json.dumps(cleaned, ensure_ascii=False) if cleaned else None
     if payload.temperature is not None:
         profile.temperature = payload.temperature
     if payload.client_settings is not None:
@@ -180,6 +269,12 @@ async def _profile_for(api_key: ApiKey, db: AsyncSession) -> ProfileOut:
             client_settings = json.loads(p.client_settings)
         except (ValueError, TypeError):
             client_settings = None
+    language_prompts: dict[str, str] | None = None
+    if p.language_prompts:
+        try:
+            language_prompts = json.loads(p.language_prompts)
+        except (ValueError, TypeError):
+            language_prompts = None
     return ProfileOut(
         api_key_id=api_key.id,
         api_key_name=api_key.name,
@@ -187,6 +282,7 @@ async def _profile_for(api_key: ApiKey, db: AsyncSession) -> ProfileOut:
         prompt=p.prompt,
         prompt_de=p.prompt_de,
         prompt_en=p.prompt_en,
+        language_prompts=language_prompts,
         temperature=p.temperature,
         server_default_model=settings.whisper_model or None,
         client_settings=client_settings,

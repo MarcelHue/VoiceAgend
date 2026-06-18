@@ -121,6 +121,20 @@ public sealed class RecordingCoordinator
     }
 
     /// <summary>
+    /// Bricht eine laufende Aufnahme ab und VERWIRFT das Audio (kein Upload). Wird von der
+    /// Sprachwechsel-Geste (Hotkey halten + scrollen) benutzt: dort soll nur die Sprache
+    /// geändert, aber nichts transkribiert werden. No-op, wenn gerade nicht aufgenommen wird.
+    /// Der Status-Text enthält bewusst KEINE HUD-Keywords — das HUD steuert die Geste selbst.
+    /// </summary>
+    public void Cancel()
+    {
+        if (!_audio.IsRecording) return;
+        try { _audio.Stop(); } catch (Exception ex) { Logger.Warn("Cancel stop: " + ex.Message); }
+        StatusChanged?.Invoke(Loc().T("Status.LangSwitchGesture"));
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>
     /// Lädt eine Audio-Datei vom Pfad, komprimiert WAV vorher zu Opus (bandbreitenschonend),
     /// und sendet sie wie eine normale Aufnahme an den Server.
     /// </summary>

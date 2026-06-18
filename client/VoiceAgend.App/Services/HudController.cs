@@ -36,6 +36,18 @@ public sealed class HudController
         _window.Show(state, text);
     });
 
+    /// <summary>
+    /// Zeigt die aktuell gewählte Erkennungssprache während der Sprachwechsel-Geste.
+    /// Bewusst OHNE HudEnabled-Check (force-show): das HUD ist die einzige Feedback-Fläche
+    /// dieser Geste — sonst gäbe es keine sichtbare Rückmeldung.
+    /// </summary>
+    public void ShowLanguage(string display) => OnUi(() =>
+    {
+        var s = _settings();
+        _window.ApplyPosition(s.HudPosition, s.HudMargin);
+        _window.Show(HudState.LanguageSwitch, display);
+    });
+
     public void Hide() => OnUi(() => _window.Hide());
 
     public void OnStatus(string status)

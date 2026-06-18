@@ -19,6 +19,7 @@ public sealed class ProfileSyncService
     public static IDictionary<string, object?> ExtractSyncable(AppSettings s) => new Dictionary<string, object?>
     {
         ["language"] = s.Language,
+        ["enabledLanguages"] = s.EnabledLanguages,
         ["uiLanguage"] = s.UiLanguage,
         ["theme"] = s.Theme,
         ["hotkeyModifiers"] = s.HotkeyModifiers,
@@ -52,6 +53,11 @@ public sealed class ProfileSyncService
         }
 
         if (Str("language") is { } lang) s.Language = lang;
+        if (payload.TryGetProperty("enabledLanguages", out var el) && el.ValueKind == JsonValueKind.Array)
+            s.EnabledLanguages = el.EnumerateArray()
+                .Where(x => x.ValueKind == JsonValueKind.String)
+                .Select(x => x.GetString()!)
+                .ToList();
         if (Str("uiLanguage") is { } ui) s.UiLanguage = ui;
         if (Str("theme") is { } theme) s.Theme = theme;
         if (UInt("hotkeyModifiers") is { } hm) s.HotkeyModifiers = hm;

@@ -203,12 +203,10 @@
                                             HorizontalAlignment="Right">
                                     <TextBlock x:Name="HomeLanguageLabel" VerticalAlignment="Center"
                                                Foreground="{ThemeResource VATextMuteBrush}" FontSize="11" />
+                                    <!-- Items werden dynamisch in PopulateLanguageCombos() befüllt
+                                         (Auto + de/en + aktivierte Zusatzsprachen). -->
                                     <ComboBox x:Name="HomeLanguageCombo" MinWidth="140"
-                                              SelectionChanged="OnHomeLanguageChanged">
-                                        <ComboBoxItem Tag="" />
-                                        <ComboBoxItem Tag="de" />
-                                        <ComboBoxItem Tag="en" />
-                                    </ComboBox>
+                                              SelectionChanged="OnHomeLanguageChanged" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Spacing="10"
                                             HorizontalAlignment="Right">
@@ -531,26 +529,35 @@
                                     <TextBlock x:Name="ProfilePromptHint" FontSize="11"
                                                Foreground="{ThemeResource VATextMuteBrush}"
                                                TextWrapping="Wrap" />
-                                    <Grid ColumnSpacing="12">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Spacing="4">
-                                            <TextBlock x:Name="ProfilePromptDeLabel" FontSize="11"
-                                                       Foreground="{ThemeResource VATextDimBrush}" />
-                                            <TextBox x:Name="ServerPromptDeBox"
-                                                     AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"
-                                                     FontFamily="{StaticResource VAFontMono}" FontSize="12.5" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" Spacing="4">
-                                            <TextBlock x:Name="ProfilePromptEnLabel" FontSize="11"
-                                                       Foreground="{ThemeResource VATextDimBrush}" />
-                                            <TextBox x:Name="ServerPromptEnBox"
-                                                     AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"
-                                                     FontFamily="{StaticResource VAFontMono}" FontSize="12.5" />
-                                        </StackPanel>
-                                    </Grid>
+                                    <!-- Pro Sprache ein Prompt-Feld. de/en oben (nicht entfernbar),
+                                         Zusatzsprachen darunter. Items in BuildPromptLangList(). -->
+                                    <ItemsControl x:Name="PromptLanguageList">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="views:PromptLangVm">
+                                                <StackPanel Spacing="4" Margin="0,0,0,12">
+                                                    <Grid ColumnSpacing="8">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{x:Bind DisplayName}"
+                                                                   VerticalAlignment="Center" FontSize="11"
+                                                                   Foreground="{ThemeResource VATextDimBrush}" />
+                                                        <Button Grid.Column="1" Content="&#x2715;"
+                                                                Tag="{x:Bind Code}" Click="OnRemovePromptLang"
+                                                                Visibility="{x:Bind RemovableVisibility}"
+                                                                Background="Transparent" BorderThickness="0"
+                                                                FontSize="12" Padding="6,2" />
+                                                    </Grid>
+                                                    <TextBox Text="{x:Bind Prompt, Mode=TwoWay}"
+                                                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"
+                                                             FontFamily="{StaticResource VAFontMono}" FontSize="12.5" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Button x:Name="AddPromptLangButton" Click="OnAddPromptLang"
+                                            HorizontalAlignment="Left" />
                                     <TextBlock x:Name="ProfilePromptAutoHint" FontSize="11"
                                                Foreground="{ThemeResource VATextMuteBrush}"
                                                TextWrapping="Wrap" FontStyle="Italic" />
@@ -742,12 +749,9 @@
                                         <StackPanel Grid.Column="1" Spacing="5">
                                             <TextBlock x:Name="LanguageLabel" FontSize="12"
                                                        Foreground="{ThemeResource VATextDimBrush}" />
+                                            <!-- Items dynamisch in PopulateLanguageCombos(). -->
                                             <ComboBox x:Name="LanguageCombo" HorizontalAlignment="Stretch"
-                                                      SelectionChanged="OnFieldChanged">
-                                                <ComboBoxItem Tag="" />
-                                                <ComboBoxItem Tag="de" />
-                                                <ComboBoxItem Tag="en" />
-                                            </ComboBox>
+                                                      SelectionChanged="OnFieldChanged" />
                                             <TextBlock x:Name="LanguageAutoHint" FontSize="11"
                                                        Foreground="{ThemeResource VATextMuteBrush}"
                                                        TextWrapping="Wrap" />

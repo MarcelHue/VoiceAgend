@@ -21,8 +21,15 @@ public sealed class ServerApiClient
         [property: JsonPropertyName("server_default_model")] string? ServerDefaultModel = null,
         [property: JsonPropertyName("prompt_de")] string? PromptDe = null,
         [property: JsonPropertyName("prompt_en")] string? PromptEn = null,
+        [property: JsonPropertyName("language_prompts")] Dictionary<string, string>? LanguagePrompts = null,
         [property: JsonPropertyName("client_settings")] JsonElement? ClientSettings = null,
         [property: JsonPropertyName("client_settings_updated_at")] DateTime? ClientSettingsUpdatedAt = null);
+
+    /// <summary>Vom Server gemeldete Sprachen eines Whisper-Modells (ISO-Codes).</summary>
+    public sealed record ModelLanguages(
+        [property: JsonPropertyName("model_id")] string ModelId,
+        [property: JsonPropertyName("languages")] string[] Languages,
+        [property: JsonPropertyName("source")] string Source);
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
@@ -41,6 +48,18 @@ public sealed class ServerApiClient
         var r = await http.GetAsync("/api/v1/profile", ct);
         r.EnsureSuccessStatusCode();
         return (await r.Content.ReadFromJsonAsync<Profile>(JsonOpts, ct))!;
+    }
+
+    /// <summary>Holt die unterstützten Sprachen eines Modells vom Server (HF-gecacht).</summary>
+    public async Task<ModelLanguages> GetModelLanguagesAsync(
+        string baseUrl, string apiKey, string modelId, CancellationToken ct = default)
+    {
+        using var http = Build(baseUrl, apiKey);
+        // modelId enthält Slashes (z.B. "Systran/faster-whisper-medium") — roh in die URL
+        // setzen wie bei Install/Uninstall, NICHT EscapeDataString (sonst landet %2F im :path).
+        var r = await http.GetAsync($"/api/v1/models/{modelId}/languages", ct);
+        r.EnsureSuccessStatusCode();
+        return (await r.Content.ReadFromJsonAsync<ModelLanguages>(JsonOpts, ct))!;
     }
 
     public async Task InstallModelAsync(
@@ -76,6 +95,7 @@ public sealed class ServerApiClient
         string baseUrl, string apiKey,
         string? model, string? prompt, double? temperature,
         string? promptDe = null, string? promptEn = null,
+        IDictionary<string, string>? languagePrompts = null,
         IDictionary<string, object?>? clientSettings = null,
         DateTime? clientSettingsUpdatedAtUtc = null,
         CancellationToken ct = default)
@@ -86,6 +106,7 @@ public sealed class ServerApiClient
         if (prompt is not null) payload["prompt"] = prompt;
         if (promptDe is not null) payload["prompt_de"] = promptDe;
         if (promptEn is not null) payload["prompt_en"] = promptEn;
+        if (languagePrompts is not null) payload["language_prompts"] = languagePrompts;
         if (temperature is not null) payload["temperature"] = temperature;
         if (clientSettings is not null) payload["client_settings"] = clientSettings;
         if (clientSettingsUpdatedAtUtc is not null)
