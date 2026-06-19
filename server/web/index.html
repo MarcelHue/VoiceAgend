@@ -66,11 +66,14 @@
       <tbody>
         <template x-for="k in keys" :key="k.id">
           <tr>
-            <td x-text="k.name"></td>
-            <td><code x-text="k.prefix + '…'"></code></td>
-            <td x-text="formatDate(k.created_at)"></td>
-            <td x-text="k.last_used_at ? formatDate(k.last_used_at) : '–'"></td>
-            <td><button @click="deleteKey(k.id)" class="danger">Löschen</button></td>
+            <td data-label="Name" x-text="k.name"></td>
+            <td data-label="Prefix"><code x-text="k.prefix + '…'"></code></td>
+            <td data-label="Erstellt" x-text="formatDate(k.created_at)"></td>
+            <td data-label="Zuletzt benutzt" x-text="k.last_used_at ? formatDate(k.last_used_at) : '–'"></td>
+            <td class="actions">
+              <button @click="rotateKey(k.id)" class="ghost">Neu vergeben</button>
+              <button @click="deleteKey(k.id)" class="danger">Löschen</button>
+            </td>
           </tr>
         </template>
       </tbody>
@@ -90,12 +93,12 @@
       <tbody>
         <template x-for="u in users" :key="u.id">
           <tr>
-            <td x-text="u.id"></td>
-            <td x-text="u.username"></td>
-            <td><input type="checkbox" :checked="u.is_admin" @change="patchUser(u.id, {is_admin: $event.target.checked})"></td>
-            <td><input type="checkbox" :checked="u.is_active" @change="patchUser(u.id, {is_active: $event.target.checked})"></td>
-            <td x-text="formatDate(u.created_at)"></td>
-            <td>
+            <td data-label="ID" x-text="u.id"></td>
+            <td data-label="Benutzer" x-text="u.username"></td>
+            <td data-label="Admin"><input type="checkbox" :checked="u.is_admin" @change="patchUser(u.id, {is_admin: $event.target.checked})"></td>
+            <td data-label="Aktiv"><input type="checkbox" :checked="u.is_active" @change="patchUser(u.id, {is_active: $event.target.checked})"></td>
+            <td data-label="Erstellt" x-text="formatDate(u.created_at)"></td>
+            <td class="actions">
               <button @click="resetPassword(u)" class="ghost">PW zurücksetzen</button>
               <button @click="deleteUser(u.id)" class="danger" x-show="u.id !== me.id">Löschen</button>
             </td>

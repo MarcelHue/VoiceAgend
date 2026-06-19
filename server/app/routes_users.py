@@ -148,6 +148,31 @@ async def create_my_key(
     )
 
 
+@router.post("/api-keys/{key_id}/rotate", response_model=ApiKeyCreateResponse)
+async def rotate_my_key(
+    key_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Vergibt den Schlüsselwert neu, OHNE den Datensatz (und damit das daran
+    hängende Profil/die Einstellungen) zu löschen. Der alte Wert wird sofort
+    ungültig; der neue wird einmalig zurückgegeben."""
+    res = await db.execute(select(ApiKey).where(ApiKey.id == key_id, ApiKey.user_id == user.id))
+    key = res.scalar_one_or_none()
+    if not key:
+        raise HTTPException(status_code=404)
+    full, prefix, h = generate_api_key()
+    key.prefix = prefix
+    key.key_hash = h
+    key.last_used_at = None
+    await db.commit()
+    await db.refresh(key)
+    return ApiKeyCreateResponse(
+        id=key.id, name=key.name, prefix=key.prefix,
+        created_at=key.created_at, last_used_at=key.last_used_at, key=full,
+    )
+
+
 @router.delete("/api-keys/{key_id}", status_code=204)
 async def delete_my_key(
     key_id: int,

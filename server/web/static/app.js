@@ -81,6 +81,13 @@ function dashboard() {
       await this.loadKeys();
     },
 
+    async rotateKey(id) {
+      if (!confirm('Schlüssel neu vergeben? Der alte Schlüssel wird sofort ungültig — die Einstellungen (Profil) dahinter bleiben erhalten.')) return;
+      const r = await this.api('POST', '/api/api-keys/' + id + '/rotate');
+      this.newKeyValue = r.key;
+      await this.loadKeys();
+    },
+
     async deleteKey(id) {
       if (!confirm('Schlüssel wirklich löschen?')) return;
       await this.api('DELETE', '/api/api-keys/' + id);
