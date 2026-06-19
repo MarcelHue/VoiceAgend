@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0c0d10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VoiceAgend">
+<title>VoiceAgend Recorder</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+<link rel="stylesheet" href="/static/record.css">
+<script defer src="/static/vendor/alpine.min.js"></script>
+</head>
+<body x-data="recorder()" x-init="init()">
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span> VoiceAgend</div>
+    <div class="meta" x-show="token">
+      <span x-text="me?.username"></span>
+      <span class="badge" x-show="me?.is_admin">admin</span>
+      <button class="ghost" @click="logout()" style="padding:4px 10px;font-size:13px">Abmelden</button>
+    </div>
+  </div>
+
+  <!-- LOGIN -->
+  <template x-if="!token">
+    <section class="card login">
+      <h1>Anmelden</h1>
+      <p class="muted">Mit deinem VoiceAgend-Konto.</p>
+      <form @submit.prevent="login()">
+        <label class="field"><span>Benutzername</span>
+          <input type="text" x-model="loginForm.username" autocomplete="username" required></label>
+        <label class="field"><span>Passwort</span>
+          <input type="password" x-model="loginForm.password" autocomplete="current-password" required></label>
+        <button type="submit" class="primary" style="width:100%">Anmelden</button>
+        <p class="error" x-text="loginError" x-show="loginError" style="margin-top:10px"></p>
+      </form>
+    </section>
+  </template>
+
+  <!-- KEY PICKER -->
+  <template x-if="token && view==='pick'">
+    <section class="card">
+      <h2>API-Key wählen</h2>
+      <p class="muted" x-show="keys.length">Wähle den Schlüssel, dessen Profil (Modell, Sprache, Prompts) benutzt werden soll.</p>
+      <div class="keylist" x-show="keys.length">
+        <template x-for="k in keys" :key="k.id">
+          <div class="keyitem" @click="selectKey(k.id)">
+            <div><div class="kname" x-text="k.name"></div><div class="kprefix" x-text="k.prefix + '…'"></div></div>
+            <span class="link">wählen →</span>
+          </div>
+        </template>
+      </div>
+      <template x-if="!keys.length">
+        <div>
+          <p class="muted">Noch kein API-Key vorhanden. Lege einen an:</p>
+          <form @submit.prevent="createKey()" class="row">
+            <input type="text" x-model="newKeyName" placeholder="Name (z. B. „Handy")" required>
+            <button type="submit" class="primary" style="flex:0 0 auto">Erstellen</button>
+          </form>
+          <p class="error" x-text="err" x-show="err"></p>
+        </div>
+      </template>
+    </section>
+  </template>
+
+  <!-- RECORDER -->
+  <template x-if="token && view==='record'">
+  <div>
+    <section class="card">
+      <div class="reczone">
+        <button class="recbtn" :class="{recording: recording, busy: busy}" @click="toggleRecord()" :disabled="busy">
+          <span class="mic"></span>
+        </button>
+        <div class="timer" x-show="recording" x-text="fmtTime(elapsed)"></div>
+        <div class="statusline" :class="statusClass">
+          <span class="sdot"></span><span x-text="status"></span>
+        </div>
+        <div class="langrow">
+          <template x-for="code in languageOptions" :key="code || 'auto'">
+            <button class="langpill" :class="{active: code === language}" @click="setLanguage(code)"
+                    x-text="langLabel(code)"></button>
+          </template>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="tbar">
+        <span class="label">Transkript</span>
+        <div class="row" style="flex:0 0 auto; gap:6px">
+          <button class="ghost" @click="copy()" :disabled="!transcript" style="padding:6px 12px;font-size:13px">Kopieren</button>
+          <button class="ghost" @click="transcript=''" :disabled="!transcript" style="padding:6px 12px;font-size:13px">Leeren</button>
+        </div>
+      </div>
+      <div class="transcript" :class="{empty: !transcript}" x-text="transcript || 'Noch kein Text — starte eine Aufnahme.'"></div>
+      <div class="tbar" style="margin-top:8px;margin-bottom:0" x-show="transcript">
+        <span class="stats" x-text="wordCount + ' Wörter · ' + transcript.length + ' Zeichen'"></span>
+        <span class="stats" x-show="lastMs" x-text="lastMs + ' ms'"></span>
+      </div>
+    </section>
+
+    <details class="settings">
+      <summary>Profil-Einstellungen</summary>
+      <section class="card" style="margin-top:8px">
+        <label class="field"><span>Temperatur (0 = deterministisch)</span>
+          <input type="number" step="0.05" min="0" max="1" x-model.number="temperature" @change="saveTemperature()"></label>
+        <template x-if="language">
+          <label class="field"><span x-text="'Initial-Prompt für ' + langLabel(language)"></span>
+            <textarea rows="3" x-model="promptText" @change="savePrompt()"
+                      placeholder="Eigennamen, Fachbegriffe, Stil …"></textarea></label>
+        </template>
+        <p class="muted" x-show="!language">Im Auto-Modus wird kein Prompt gesendet (würde Whispers Spracherkennung festnageln).</p>
+        <div class="row" style="margin-top:6px">
+          <button class="ghost" @click="changeKey()">Anderen Key wählen</button>
+          <a class="link" href="/" x-show="me?.is_admin" style="align-self:center;text-align:right">Dashboard →</a>
+        </div>
+      </section>
+    </details>
+  </div>
+  </template>
+
+  <div class="toast" x-show="toast" x-text="toast" x-transition style="display:none"></div>
+</div>
+
+<script src="/static/languages.js"></script>
+<script src="/static/app-record.js"></script>
+</body>
+</html>

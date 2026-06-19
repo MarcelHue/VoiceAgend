@@ -16,6 +16,7 @@ from .routes_users import router as users_router
 from .routes_ws import router as ws_router
 from .routes_stats import router as stats_router
 from .routes_profile import router as profile_router
+from .routes_web import router as web_router
 
 
 async def ensure_default_admin() -> None:
@@ -49,6 +50,7 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(stats_router)
 app.include_router(profile_router)
+app.include_router(web_router)
 app.include_router(ws_router)
 
 
@@ -70,3 +72,19 @@ if WEB_DIR.exists():
     @app.get("/")
     async def index():
         return FileResponse(WEB_DIR / "index.html")
+
+    @app.get("/app")
+    async def record_app():
+        """Aufnahme-/Transkriptions-PWA (separate Seite vom Admin-Dashboard)."""
+        return FileResponse(WEB_DIR / "app.html")
+
+    @app.get("/sw.js")
+    async def service_worker():
+        # Muss vom Root ausgeliefert werden, damit der Scope "/" die /app-Seite abdeckt.
+        return FileResponse(WEB_DIR / "sw.js", media_type="application/javascript")
+
+    @app.get("/manifest.webmanifest")
+    async def manifest():
+        return FileResponse(
+            WEB_DIR / "manifest.webmanifest", media_type="application/manifest+json"
+        )

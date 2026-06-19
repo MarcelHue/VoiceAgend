@@ -7,7 +7,7 @@ from sqlalchemy import select
 from .config import settings
 from .db import SessionLocal, Transcription, Profile
 from .security import authenticate_api_key, resolve_api_key
-from .transcribe import service, TranscriptionError
+from .transcribe import service, TranscriptionError, select_prompt
 
 router = APIRouter()
 
@@ -57,31 +57,10 @@ async def ws_transcribe(ws: WebSocket):
 
         await ws.send_json({"status": "processing"})
 
-        # Sprach-abhängige Prompt-Auswahl:
-        # - language_prompts[lang] → Prompt für zusätzlich aktivierte Sprachen
-        # - explizit "de" → prompt_de (Fallback: legacy prompt)
-        # - explizit "en" → prompt_en (Fallback: legacy prompt)
-        # - Auto-Modus (keine Sprache) → kein Prompt, damit Whisper neutral
-        #   detektieren kann. Ein deutscher Prompt zwingt Whisper sonst auf Deutsch,
-        #   selbst wenn der User Englisch spricht.
-        chosen_prompt: str | None = None
-        if profile is not None and language:
-            lang_lc = language.lower()
-            lang_map: dict = {}
-            if profile.language_prompts:
-                try:
-                    lang_map = json.loads(profile.language_prompts)
-                except (ValueError, TypeError):
-                    lang_map = {}
-            mapped = lang_map.get(lang_lc)
-            if mapped and mapped.strip():
-                chosen_prompt = mapped
-            elif lang_lc == "de":
-                chosen_prompt = profile.prompt_de or profile.prompt
-            elif lang_lc == "en":
-                chosen_prompt = profile.prompt_en or profile.prompt
-            else:
-                chosen_prompt = profile.prompt
+        # Sprach-abhängige Prompt-Auswahl (geteilt mit dem Web-Transcribe):
+        # language_prompts[lang] → de/en-Spalten → Legacy-prompt. Auto-Modus = kein
+        # Prompt, damit Whisper neutral detektiert (ein dt. Prompt zwingt sonst auf DE).
+        chosen_prompt = select_prompt(profile, language)
 
         t0 = time.perf_counter()
         try:

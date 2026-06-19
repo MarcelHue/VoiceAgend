@@ -1,8 +1,35 @@
+import json
 import re
 from difflib import SequenceMatcher
 
 import httpx
 from .config import settings
+
+
+def select_prompt(profile, language: str | None) -> str | None:
+    """Wählt den Initial-Prompt passend zur Erkennungssprache.
+
+    Reihenfolge: language_prompts[lang] → de/en-Spalten → Legacy-`prompt`.
+    Auto-Modus (kein language) → None, damit Whisper neutral detektiert.
+    Geteilt von WebSocket-Transcribe (Desktop) und Web-Transcribe (PWA).
+    """
+    if profile is None or not language:
+        return None
+    lang_lc = language.lower()
+    lang_map: dict = {}
+    if getattr(profile, "language_prompts", None):
+        try:
+            lang_map = json.loads(profile.language_prompts)
+        except (ValueError, TypeError):
+            lang_map = {}
+    mapped = lang_map.get(lang_lc)
+    if mapped and mapped.strip():
+        return mapped
+    if lang_lc == "de":
+        return profile.prompt_de or profile.prompt
+    if lang_lc == "en":
+        return profile.prompt_en or profile.prompt
+    return profile.prompt
 
 
 def _normalize(s: str) -> str:
@@ -131,9 +158,13 @@ class TranscriptionService:
         model: str | None = None,
         prompt: str | None = None,
         temperature: float | None = None,
+        filename: str = "audio.ogg",
+        content_type: str = "audio/ogg",
     ) -> tuple[str, str | None]:
         assert self._client is not None
-        files = {"file": ("audio.ogg", audio_bytes, "audio/ogg")}
+        # filename/content_type sind nur Hints — Speaches/ffmpeg erkennt das Format
+        # inhaltsbasiert. Der Browser liefert z.B. audio/webm;codecs=opus.
+        files = {"file": (filename, audio_bytes, content_type)}
         data: dict[str, str] = {
             "model": model or settings.whisper_model,
             "response_format": "json",
