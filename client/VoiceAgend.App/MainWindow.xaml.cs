@@ -22,8 +22,11 @@ public sealed partial class MainWindow : Window
     public ICommand ShowWindowCommand { get; }
     public ICommand ToggleCommand { get; }
     public ICommand QuitCommand { get; }
+    public ICommand RetryCommand { get; }
 
     private bool _suppressAutoSave;
+    // UI einmalig aus den Settings laden (nicht bei jeder Fenster-Aktivierung).
+    private bool _uiLoaded;
     private bool _quitting;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _recTimer;
     private DateTime _recStartedAt = DateTime.MinValue;
@@ -87,10 +90,20 @@ public sealed partial class MainWindow : Window
         };
         try { AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico")); }
         catch (Exception ex) { Logger.Warn("SetIcon: " + ex.Message); }
-        Activated += (_, _) =>
+        // Activated feuert bei JEDEM Fokuswechsel (auch beim Verlassen). Früher lief hier jedes
+        // Mal das komplette LoadIntoUi: Geräte-Enumeration, Combos neu, Server-Request für die
+        // Prompt-Vorschau — und ein bearbeitetes Transkript wurde überschrieben. Jetzt: einmal
+        // voll laden, danach nur die Mikrofonliste auffrischen (neu eingestecktes USB-Mikro).
+        // Remote-Settings laden über RemoteSettingsApplied weiterhin explizit neu.
+        Activated += (_, args) =>
         {
+            if (args.WindowActivationState == WindowActivationState.Deactivated) return;
             _suppressAutoSave = true;
-            try { LoadIntoUi(); }
+            try
+            {
+                if (!_uiLoaded) { LoadIntoUi(); _uiLoaded = true; }
+                else RefreshMicList();
+            }
             finally { _suppressAutoSave = false; }
         };
         Closed += OnWindowClosed;
@@ -141,6 +154,11 @@ public sealed partial class MainWindow : Window
         App.Current.RecognitionLanguageChanged += () =>
             DispatcherQueue.TryEnqueue(PopulateLanguageCombos);
 
+        // Fehlgeschlagene Aufnahme erneut senden (Tray + Button im Transkript-Kopf).
+        RetryCommand = new RelayCommand(async _ => await App.Current.Coordinator.RetryPendingAsync());
+        App.Current.Coordinator.PendingRetryChanged += () =>
+            DispatcherQueue.TryEnqueue(UpdatePendingRetryUi);
+
         ShowWindowCommand = new RelayCommand(_ => Activate());
         ToggleCommand = new RelayCommand(async _ => await App.Current.Coordinator.ToggleAsync());
         QuitCommand = new RelayCommand(_ => DoQuit());
@@ -185,19 +203,7 @@ public sealed partial class MainWindow : Window
         ApiKeyBox.Password = s.ApiKey;
         SetLanguageSelection(s.Language);
 
-        MicCombo.Items.Clear();
-        MicCombo.Items.Add(new MicEntry(-1, "Standard (Windows-Default)"));
-        foreach (var d in AudioCaptureService.ListDevices())
-            MicCombo.Items.Add(new MicEntry(d.Number, d.Name));
-        // Erst per Name matchen — WaveIn-Device-Numbers sind nicht stabil
-        // über Reboots / USB-Plug-Events hinweg. Number nur als Fallback.
-        var entries = MicCombo.Items.Cast<MicEntry>().ToList();
-        var byName = !string.IsNullOrEmpty(s.MicDeviceName) && s.MicDeviceNumber >= 0
-            ? entries.FindIndex(e => e.Number >= 0 && e.Name == s.MicDeviceName)
-            : -1;
-        var byNumber = entries.FindIndex(e => e.Number == s.MicDeviceNumber);
-        MicCombo.SelectedIndex = byName >= 0 ? byName : byNumber;
-        if (MicCombo.SelectedIndex < 0) MicCombo.SelectedIndex = 0;
+        RefreshMicList();
 
         HotkeyDisplay.Text = s.HotkeyDisplay();
 
@@ -239,12 +245,162 @@ public sealed partial class MainWindow : Window
             }
         }
         if (HudPositionCombo.SelectedItem == null) HudPositionCombo.SelectedIndex = 2;
+        HudOpacitySlider.Value = Math.Clamp(s.HudBackgroundOpacity, 0, 100);
+        // Slider-Gotcha: Minimum > 0 erst NACH dem Value setzen (Maximum → Value → Minimum).
+        HudScaleSlider.Value = Math.Clamp(s.HudScale, 50, 200);
+        HudScaleSlider.Minimum = 50;
+        HudMarginSlider.Value = Math.Clamp(s.HudMargin, 0, 200);
+        HudElBadge.IsChecked = s.HudShowBadge;
+        HudElTitle.IsChecked = s.HudShowTitle;
+        HudElValue.IsChecked = s.HudShowValue;
+        HudElWave.IsChecked = s.HudShowWaveform;
+        HudElHotkey.IsChecked = s.HudShowHotkey;
+        HudElHint.IsChecked = s.HudShowHint;
+        HudElLanguage.IsChecked = s.HudShowLanguage;
+        HudElMic.IsChecked = s.HudShowMic;
+        HudElOutput.IsChecked = s.HudShowOutput;
+        HudElPending.IsChecked = s.HudShowPending;
+        UpdateHudSliderLabels();
+    }
+
+    /// <summary>
+    /// Mikrofon-Liste aufbauen. Bei späteren Fenster-Aktivierungen nur neu, wenn sich die
+    /// Geräte wirklich geändert haben — sonst bleibt Liste und Auswahl unangetastet.
+    /// </summary>
+    private void RefreshMicList()
+    {
+        var s = App.Current.Settings;
+        var devices = AudioCaptureService.ListDevices().Select(d => (d.Number, d.Name)).ToList();
+        var current = MicCombo.Items.OfType<MicEntry>().Where(x => x.Number >= 0)
+            .Select(x => (x.Number, x.Name)).ToList();
+        if (MicCombo.Items.Count > 0 && current.SequenceEqual(devices)) return;
+
+        MicCombo.Items.Clear();
+        MicCombo.Items.Add(new MicEntry(-1, "Standard (Windows-Default)"));
+        foreach (var (number, name) in devices)
+            MicCombo.Items.Add(new MicEntry(number, name));
+        // Erst per Name matchen — WaveIn-Device-Numbers sind nicht stabil
+        // über Reboots / USB-Plug-Events hinweg. Number nur als Fallback.
+        var entries = MicCombo.Items.Cast<MicEntry>().ToList();
+        var byName = !string.IsNullOrEmpty(s.MicDeviceName) && s.MicDeviceNumber >= 0
+            ? entries.FindIndex(x => x.Number >= 0 && x.Name == s.MicDeviceName)
+            : -1;
+        var byNumber = entries.FindIndex(x => x.Number == s.MicDeviceNumber);
+        MicCombo.SelectedIndex = byName >= 0 ? byName : byNumber;
+        if (MicCombo.SelectedIndex < 0) MicCombo.SelectedIndex = 0;
     }
 
     private void OnHudPreview(object sender, RoutedEventArgs e)
     {
         AutoSave();
         App.Current.Hud?.Show(HudState.Recording, "HUD-Vorschau");
+    }
+
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _hudSaveTimer;
+
+    /// <summary>
+    /// Entprelltes Speichern für die HUD-Regler — sonst würde jeder Slider-Tick Datei,
+    /// Hotkey-Neuregistrierung und Server-Sync anstoßen.
+    /// </summary>
+    private void ScheduleHudSave()
+    {
+        if (_hudSaveTimer is null)
+        {
+            _hudSaveTimer = DispatcherQueue.CreateTimer();
+            _hudSaveTimer.Interval = TimeSpan.FromMilliseconds(500);
+            _hudSaveTimer.IsRepeating = false;
+            _hudSaveTimer.Tick += (_, _) => App.Current.SaveSettings();
+        }
+        _hudSaveTimer.Stop();
+        _hudSaveTimer.Start();
+    }
+
+    // Die HUD-Regler wirken sofort auf ein sichtbares HUD (Vorschau / Verschiebe-Modus).
+    private void OnHudOpacityChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        UpdateHudSliderLabels();
+        if (_suppressAutoSave) return;
+        App.Current.Settings.HudBackgroundOpacity = (int)Math.Round(e.NewValue);
+        App.Current.Hud?.RefreshLayout();
+        ScheduleHudSave();
+    }
+
+    private void OnHudScaleChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        UpdateHudSliderLabels();
+        if (_suppressAutoSave) return;
+        App.Current.Settings.HudScale = Math.Clamp((int)Math.Round(e.NewValue), 50, 200);
+        App.Current.Hud?.RefreshLayout();
+        ScheduleHudSave();
+    }
+
+    private void OnHudMarginChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        UpdateHudSliderLabels();
+        if (_suppressAutoSave) return;
+        App.Current.Settings.HudMargin = (int)Math.Round(e.NewValue);
+        App.Current.Hud?.ApplyPosition();
+        ScheduleHudSave();
+    }
+
+    private void UpdateHudSliderLabels()
+    {
+        // Läuft schon während InitializeComponent (ValueChanged) → Null-Checks.
+        var L = App.Current.Loc;
+        if (HudOpacityLabel is not null && HudOpacitySlider is not null)
+            HudOpacityLabel.Text = string.Format(L.T("Settings.HudOpacityFmt"), (int)Math.Round(HudOpacitySlider.Value));
+        if (HudScaleLabel is not null && HudScaleSlider is not null)
+            HudScaleLabel.Text = string.Format(L.T("Settings.HudScaleFmt"), (int)Math.Round(HudScaleSlider.Value));
+        if (HudMarginLabel is not null && HudMarginSlider is not null)
+            HudMarginLabel.Text = string.Format(L.T("Settings.HudMarginFmt"), (int)Math.Round(HudMarginSlider.Value));
+    }
+
+    /// <summary>Element-Checkboxen → Settings + Live-Update. Beim Laden (LoadIntoUi) ignoriert.</summary>
+    private void OnHudElementToggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressAutoSave) return;
+        var s = App.Current.Settings;
+        s.HudShowBadge = HudElBadge.IsChecked == true;
+        s.HudShowTitle = HudElTitle.IsChecked == true;
+        s.HudShowValue = HudElValue.IsChecked == true;
+        s.HudShowWaveform = HudElWave.IsChecked == true;
+        s.HudShowHotkey = HudElHotkey.IsChecked == true;
+        s.HudShowHint = HudElHint.IsChecked == true;
+        s.HudShowLanguage = HudElLanguage.IsChecked == true;
+        s.HudShowMic = HudElMic.IsChecked == true;
+        s.HudShowOutput = HudElOutput.IsChecked == true;
+        s.HudShowPending = HudElPending.IsChecked == true;
+        App.Current.SaveSettings();
+        App.Current.Hud?.RefreshLayout();
+    }
+
+    private void OnHudMoveToggle(object sender, RoutedEventArgs e) =>
+        App.Current.Hud?.SetEditMode(HudMoveToggle.IsChecked == true);
+
+    /// <summary>Verschiebe-Modus beenden (Tab-/Seitenwechsel), HUD wird wieder klick-durchlässig.</summary>
+    private void EndHudMoveMode()
+    {
+        if (HudMoveToggle is not null && HudMoveToggle.IsChecked == true) HudMoveToggle.IsChecked = false;
+        App.Current.Hud?.SetEditMode(false);
+    }
+
+    /// <summary>Vom HUD nach einem Drag gemeldet: als benutzerdefinierte Position übernehmen.</summary>
+    internal void OnHudCustomPositionPicked(int x, int y)
+    {
+        var s = App.Current.Settings;
+        s.HudPosition = HudPosition.Custom;
+        s.HudCustomX = x;
+        s.HudCustomY = y;
+        App.Current.SaveSettings();
+        App.Current.Hud?.ApplyPosition();
+        var prev = _suppressAutoSave;
+        _suppressAutoSave = true;
+        try
+        {
+            foreach (ComboBoxItem it in HudPositionCombo.Items)
+                if ((string)it.Tag == "Custom") { HudPositionCombo.SelectedItem = it; break; }
+        }
+        finally { _suppressAutoSave = prev; }
     }
 
     private void OnAutoStartToggle(object sender, RoutedEventArgs e)
@@ -264,6 +420,7 @@ public sealed partial class MainWindow : Window
         WhatsNewView.Visibility = tag == "whatsnew" ? Visibility.Visible : Visibility.Collapsed;
         AboutView.Visibility = tag == "about" ? Visibility.Visible : Visibility.Collapsed;
         if (tag == "profile") _ = LoadProfileAsync();
+        if (tag != "settings") EndHudMoveMode();
         if (tag == "settings") ApplySettingsTab(_activeSettingsTab);
         if (tag == "whatsnew") _ = LoadWhatsNewAsync();
         if (tag == "about") RenderAbout();
@@ -611,13 +768,19 @@ public sealed partial class MainWindow : Window
         ConnectionCard.Visibility = tab == "connection" ? Visibility.Visible : Visibility.Collapsed;
         RecordingCard.Visibility = tab == "recording" ? Visibility.Visible : Visibility.Collapsed;
         SoundsCard.Visibility = tab == "sounds" ? Visibility.Visible : Visibility.Collapsed;
+        HudCard.Visibility = tab == "hud" ? Visibility.Visible : Visibility.Collapsed;
         SystemCard.Visibility = tab == "system" ? Visibility.Visible : Visibility.Collapsed;
 
         // Aktive Highlights
         HighlightNav(NavSettingsConnection, tab == "connection");
         HighlightNav(NavSettingsRecording, tab == "recording");
         HighlightNav(NavSettingsSounds, tab == "sounds");
+        HighlightNav(NavSettingsHud, tab == "hud");
         HighlightNav(NavSettingsSystem, tab == "system");
+
+        // Verschiebe-Modus nur solange der HUD-Tab offen ist — sonst bliebe das HUD
+        // unbemerkt greifbar (nicht klick-durchlässig) auf dem Bildschirm.
+        if (tab != "hud") EndHudMoveMode();
 
         // Card-Header (Titel + Subtitle)
         SettingsTitle.Text = tab switch
@@ -625,6 +788,7 @@ public sealed partial class MainWindow : Window
             "connection" => L.T("Settings.Card.Connection"),
             "recording" => L.T("Settings.Card.Recording"),
             "sounds" => L.T("Settings.Card.Sounds"),
+            "hud" => L.T("Settings.Card.Hud"),
             "system" => L.T("Settings.Card.System"),
             _ => "",
         };
@@ -633,6 +797,7 @@ public sealed partial class MainWindow : Window
             "connection" => L.T("Settings.Subtitle.Connection"),
             "recording" => L.T("Settings.Subtitle.Recording"),
             "sounds" => L.T("Settings.Subtitle.Sounds"),
+            "hud" => L.T("Settings.Subtitle.Hud"),
             "system" => L.T("Settings.Subtitle.System"),
             _ => "",
         };
@@ -805,11 +970,23 @@ public sealed partial class MainWindow : Window
         StatTempValue.Text = p.Temperature.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
         StatTempSub.Text = p.Temperature < 0.05 ? L.T("Profile.TempDeterministic") : L.T("Profile.TempVaried");
 
-        // Stat 3: Prompt word count
-        var promptWords = string.IsNullOrWhiteSpace(p.Prompt) ? 0
-            : p.Prompt.Split(new[] { ' ', ',', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
-        StatPromptValue.Text = promptWords.ToString();
-        StatPromptSub.Text = L.T("Profile.PromptWordsBiased");
+        // Stat 3: Wörter des Prompts, der für die aktuelle Erkennungssprache wirklich gesendet
+        // wird (de/en-Spalten bzw. language_prompts). Das alte Einzel-`prompt`-Feld ist seit den
+        // Pro-Sprache-Prompts leer und taugt nicht mehr als Quelle.
+        var lang = (App.Current.Settings.Language ?? "").ToLowerInvariant();
+        if (string.IsNullOrEmpty(lang))
+        {
+            StatPromptValue.Text = "0";
+            StatPromptSub.Text = L.T("Profile.PromptAutoNone");
+        }
+        else
+        {
+            var active = MergePrompts(p).TryGetValue(lang, out var pr) ? pr : "";
+            var promptWords = string.IsNullOrWhiteSpace(active) ? 0
+                : active.Split(new[] { ' ', ',', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+            StatPromptValue.Text = promptWords.ToString();
+            StatPromptSub.Text = string.Format(L.T("Profile.PromptWordsBiasedFmt"), lang.ToUpperInvariant());
+        }
 
         // Stat 4: API-Key
         StatApiKeyValue.Text = $"#{p.ApiKeyId}";
@@ -1463,6 +1640,10 @@ public sealed partial class MainWindow : Window
                 baseUrl, s.ApiKey, model ?? "", prompt: "", temperature: temp,
                 promptDe: promptDe, promptEn: promptEn, languagePrompts: languagePrompts);
             UpdatePromptPreviewForCurrentLanguage(MergePrompts(saved));
+            // Kacheln (Modell/Temperatur/Prompt-Wörter) + "aktiv"-Markierung sofort nachziehen,
+            // nicht erst beim nächsten Tab-Wechsel.
+            UpdateProfileStatCards(saved);
+            BuildCatalogList();
             ProfileStatus.Text = string.Format(App.Current.Loc.T("Status.SavedFmt"), DateTime.Now);
         }
         catch (Exception ex)
@@ -1489,6 +1670,36 @@ public sealed partial class MainWindow : Window
     {
         TranscriptBox.Text = "";
         HomeStatus.Text = App.Current.Loc.T("Home.Status.Cleared");
+    }
+
+    private async void OnRetryPending(object sender, RoutedEventArgs e)
+    {
+        try { await App.Current.Coordinator.RetryPendingAsync(); }
+        catch (Exception ex) { CrashHandler.Handle("Retry-Pending", ex); }
+    }
+
+    private void OnDiscardPending(object sender, RoutedEventArgs e) =>
+        App.Current.Coordinator.DiscardPending();
+
+    /// <summary>
+    /// Retry-/Verwerfen-Buttons und Tray-Eintrag nur zeigen, wenn eine fehlgeschlagene
+    /// Aufnahme aussteht; während eines laufenden Sendevorgangs/Aufnahme deaktivieren.
+    /// </summary>
+    private void UpdatePendingRetryUi()
+    {
+        var c = App.Current.Coordinator;
+        var vis = c.HasPendingRetry ? Visibility.Visible : Visibility.Collapsed;
+        var enabled = !c.IsBusy && !c.IsRecording;
+        BtnRetryPending.Visibility = vis;
+        BtnDiscardPending.Visibility = vis;
+        BtnRetryPending.IsEnabled = enabled;
+        BtnDiscardPending.IsEnabled = enabled;
+        try
+        {
+            TrayRetryItem.Visibility = vis;
+            TrayRetryItem.IsEnabled = enabled;
+        }
+        catch { }
     }
 
     private void OnHotkeyEnabledToggled(object sender, RoutedEventArgs e)
@@ -1809,9 +2020,21 @@ public sealed partial class MainWindow : Window
     private static void FillLanguageCombo(
         ComboBox combo, List<(string Tag, string Label)> entries, string selectedTag)
     {
-        combo.Items.Clear();
-        foreach (var (tag, label) in entries)
-            combo.Items.Add(new ComboBoxItem { Tag = tag, Content = label });
+        // Nur neu aufbauen, wenn sich die Einträge wirklich geändert haben. LoadIntoUi läuft bei
+        // jeder Fenster-Aktivierung — und schon das Öffnen des Dropdowns aktiviert das Fenster.
+        // Items.Clear() bei offenem Dropdown warf "Cannot complete a collection modification
+        // while another modification is in progress" (App.UnhandledException im Log).
+        var unchanged = combo.Items.Count == entries.Count
+            && combo.Items.Select((it, i) => it is ComboBoxItem ci
+                    && (string)ci.Tag == entries[i].Tag
+                    && (ci.Content as string) == entries[i].Label)
+                .All(x => x);
+        if (!unchanged && !combo.IsDropDownOpen)
+        {
+            combo.Items.Clear();
+            foreach (var (tag, label) in entries)
+                combo.Items.Add(new ComboBoxItem { Tag = tag, Content = label });
+        }
         SetComboByTag(combo, selectedTag);
     }
 
@@ -2183,7 +2406,10 @@ public sealed partial class MainWindow : Window
     private void ApplyLocalization()
     {
         var L = App.Current.Loc;
-        Title = L.T("Window.Title");
+        // Activated kann nach Close() noch feuern → Title-Setter wirft dann
+        // "WinUI Desktop Window object has already been closed" (App.UnhandledException im Log).
+        try { Title = L.T("Window.Title"); }
+        catch (Exception ex) { Logger.Warn("Window title: " + ex.Message); }
         WindowTitleLabel.Text = L.T("Window.Title");
         OnlinePillText.Text = L.T("Status.Online");
 
@@ -2208,10 +2434,16 @@ public sealed partial class MainWindow : Window
             TrayIcon.ToolTipText = App.Current.Coordinator.IsRecording
                 ? L.T("Tray.TooltipRecording") : L.T("Tray.Tooltip");
             TrayToggleItem.Text = L.T("Tray.Toggle");
+            TrayRetryItem.Text = L.T("Tray.Retry");
             TrayShowItem.Text = L.T("Tray.ShowWindow");
             TrayQuitItem.Text = L.T("Tray.Quit");
         }
         catch { }
+        ToolTipService.SetToolTip(BtnRetryPending, L.T("Home.Btn.Retry"));
+        ToolTipService.SetToolTip(BtnDiscardPending, L.T("Home.Btn.DiscardPending"));
+        ToolTipService.SetToolTip(BtnCopyTranscript, L.T("Home.Btn.Copy"));
+        ToolTipService.SetToolTip(BtnClearTranscript, L.T("Home.Btn.Clear"));
+        UpdatePendingRetryUi();
 
         // ----- Home -----
         TranscriptBox.PlaceholderText = L.T("Home.Placeholder");
@@ -2268,6 +2500,7 @@ public sealed partial class MainWindow : Window
         NavSettingsConnectionLabel.Text = L.T("Settings.Card.Connection");
         NavSettingsRecordingLabel.Text = L.T("Settings.Card.Recording");
         NavSettingsSoundsLabel.Text = L.T("Settings.Card.Sounds");
+        NavSettingsHudLabel.Text = L.T("Settings.Card.Hud");
         NavSettingsSystemLabel.Text = L.T("Settings.Card.System");
 
         // Sub-Beschriftungen für Karteninhalte
@@ -2348,13 +2581,28 @@ public sealed partial class MainWindow : Window
         }
 
         HudPreviewButton.Content = L.T("Settings.HudPreview");
+        HudMoveLabel.Text = L.T("Settings.HudMoveLabel");
+        HudMoveToggle.Content = L.T("Settings.HudMoveToggle");
+        HudMoveHint.Text = L.T("Settings.HudMoveHint");
+        HudElementsLabel.Text = L.T("Settings.HudElements");
+        HudElBadge.Content = L.T("Settings.HudEl.Badge");
+        HudElTitle.Content = L.T("Settings.HudEl.Title");
+        HudElValue.Content = L.T("Settings.HudEl.Value");
+        HudElWave.Content = L.T("Settings.HudEl.Wave");
+        HudElHotkey.Content = L.T("Settings.HudEl.Hotkey");
+        HudElHint.Content = L.T("Settings.HudEl.Hint");
+        HudElLanguage.Content = L.T("Settings.HudEl.Language");
+        HudElMic.Content = L.T("Settings.HudEl.Mic");
+        HudElOutput.Content = L.T("Settings.HudEl.Output");
+        HudElPending.Content = L.T("Settings.HudEl.Pending");
+        UpdateHudSliderLabels();
 
         // HUD-Positions
-        if (HudPositionCombo.Items.Count >= 9)
+        if (HudPositionCombo.Items.Count >= 10)
         {
             var keys = new[] { "Hud.TopLeft", "Hud.TopCenter", "Hud.TopRight",
                 "Hud.MiddleLeft", "Hud.MiddleCenter", "Hud.MiddleRight",
-                "Hud.BottomLeft", "Hud.BottomCenter", "Hud.BottomRight" };
+                "Hud.BottomLeft", "Hud.BottomCenter", "Hud.BottomRight", "Hud.Custom" };
             for (var i = 0; i < keys.Length; i++)
                 ((ComboBoxItem)HudPositionCombo.Items[i]).Content = L.T(keys[i]);
         }
@@ -2410,6 +2658,8 @@ public sealed partial class MainWindow : Window
         TrayIcon.ToolTipText = App.Current.Coordinator.IsRecording
             ? App.Current.Loc.T("Tray.TooltipRecording")
             : App.Current.Loc.T("Tray.Tooltip");
+        // Retry-Buttons während Aufnahme/Senden sperren (StateChanged ruft uns auf).
+        UpdatePendingRetryUi();
     }
 
     private sealed record MicEntry(int Number, string Name)

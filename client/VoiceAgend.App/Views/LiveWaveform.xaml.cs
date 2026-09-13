@@ -15,8 +15,23 @@ public sealed partial class LiveWaveform : UserControl
 
     public int BarCount { get; }
 
-    /// <summary>Wenn false: statische, leise gedimmte Bars (idle).</summary>
-    public bool IsActive { get; set; } = true;
+    private bool _isActive = true;
+
+    /// <summary>
+    /// Wenn false: statische, leise gedimmte Bars (idle). Der Animations-Timer läuft nur im
+    /// aktiven Zustand — sonst rechnete er dauerhaft (auch bei verstecktem HUD) 14×/s neu.
+    /// </summary>
+    public bool IsActive
+    {
+        get => _isActive;
+        set
+        {
+            if (_isActive == value) return;
+            _isActive = value;
+            if (value && IsLoaded) _timer.Start(); else _timer.Stop();
+            UpdateHeights();
+        }
+    }
 
     public LiveWaveform() : this(80) { }
 

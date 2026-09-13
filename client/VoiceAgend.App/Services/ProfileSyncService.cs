@@ -36,6 +36,19 @@ public sealed class ProfileSyncService
         ["hudEnabled"] = s.HudEnabled,
         ["hudPosition"] = s.HudPosition.ToString(),
         ["hudMargin"] = s.HudMargin,
+        ["hudBackgroundOpacity"] = s.HudBackgroundOpacity,
+        // HudCustomX/Y bleiben gerätelokal (Monitor-Layout).
+        ["hudScale"] = s.HudScale,
+        ["hudShowBadge"] = s.HudShowBadge,
+        ["hudShowTitle"] = s.HudShowTitle,
+        ["hudShowValue"] = s.HudShowValue,
+        ["hudShowWaveform"] = s.HudShowWaveform,
+        ["hudShowHotkey"] = s.HudShowHotkey,
+        ["hudShowHint"] = s.HudShowHint,
+        ["hudShowLanguage"] = s.HudShowLanguage,
+        ["hudShowMic"] = s.HudShowMic,
+        ["hudShowOutput"] = s.HudShowOutput,
+        ["hudShowPending"] = s.HudShowPending,
     };
 
     /// <summary>Wendet einen vom Server gepullten Settings-Block auf das lokale AppSettings an.</summary>
@@ -74,6 +87,18 @@ public sealed class ProfileSyncService
         if (Bool("hudEnabled") is { } hue) s.HudEnabled = hue;
         if (EnumOf<HudPosition>("hudPosition") is { } hp) s.HudPosition = hp;
         if (Int("hudMargin") is { } hmg) s.HudMargin = hmg;
+        if (Int("hudBackgroundOpacity") is { } hbo) s.HudBackgroundOpacity = Math.Clamp(hbo, 0, 100);
+        if (Int("hudScale") is { } hsc) s.HudScale = Math.Clamp(hsc, 50, 200);
+        if (Bool("hudShowBadge") is { } e1) s.HudShowBadge = e1;
+        if (Bool("hudShowTitle") is { } e2) s.HudShowTitle = e2;
+        if (Bool("hudShowValue") is { } e3) s.HudShowValue = e3;
+        if (Bool("hudShowWaveform") is { } e4) s.HudShowWaveform = e4;
+        if (Bool("hudShowHotkey") is { } e5) s.HudShowHotkey = e5;
+        if (Bool("hudShowHint") is { } e6) s.HudShowHint = e6;
+        if (Bool("hudShowLanguage") is { } e7) s.HudShowLanguage = e7;
+        if (Bool("hudShowMic") is { } e8) s.HudShowMic = e8;
+        if (Bool("hudShowOutput") is { } e9) s.HudShowOutput = e9;
+        if (Bool("hudShowPending") is { } e10) s.HudShowPending = e10;
     }
 
     /// <summary>

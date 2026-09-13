@@ -5,78 +5,115 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:views="using:VoiceAgend.App.Views">
 
-    <Grid x:Name="Root" Padding="20,0,24,0" CornerRadius="48">
-        <Grid.Background>
-            <SolidColorBrush x:Name="BgBrush" Color="#FF101216" />
-        </Grid.Background>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
+    <!-- Die Viewbox skaliert die komplette Pille (Größen-Regler). Das Fenster wird auf
+         gemessene Inhaltsbreite × Skalierung dimensioniert → der Hintergrund passt sich
+         automatisch an die sichtbaren Elemente an. -->
+    <Viewbox x:Name="ScaleBox" Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Top">
+        <Grid x:Name="Root" Height="96" MinWidth="96" Padding="20,0,24,0" CornerRadius="48"
+              BorderThickness="0">
+            <Grid.Background>
+                <SolidColorBrush x:Name="BgBrush" Color="#FF101216" />
+            </Grid.Background>
 
-        <!-- ============ BADGE (left) — 64x64 ============ -->
-        <Grid Grid.Column="0" Width="64" Height="64" VerticalAlignment="Center">
-            <Ellipse x:Name="BadgeBg" Width="64" Height="64" Opacity="0.18" />
-            <Ellipse x:Name="BadgePulseRing" Width="64" Height="64" Opacity="0">
-                <Ellipse.RenderTransform>
-                    <ScaleTransform x:Name="BadgePulseScale" CenterX="32" CenterY="32" ScaleX="1" ScaleY="1" />
-                </Ellipse.RenderTransform>
-            </Ellipse>
-            <Ellipse x:Name="BadgeDot" Width="18" Height="18" Visibility="Collapsed" />
-            <FontIcon x:Name="BadgeIcon" Glyph="" FontSize="28" Visibility="Collapsed" />
-            <StackPanel x:Name="BadgeDots" Orientation="Horizontal" Spacing="5"
-                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                        Visibility="Collapsed">
-                <Ellipse x:Name="Dot1" Width="6" Height="6">
-                    <Ellipse.RenderTransform>
-                        <TranslateTransform x:Name="Dot1T" Y="0" />
-                    </Ellipse.RenderTransform>
-                </Ellipse>
-                <Ellipse x:Name="Dot2" Width="6" Height="6">
-                    <Ellipse.RenderTransform>
-                        <TranslateTransform x:Name="Dot2T" Y="0" />
-                    </Ellipse.RenderTransform>
-                </Ellipse>
-                <Ellipse x:Name="Dot3" Width="6" Height="6">
-                    <Ellipse.RenderTransform>
-                        <TranslateTransform x:Name="Dot3T" Y="0" />
-                    </Ellipse.RenderTransform>
-                </Ellipse>
+            <StackPanel x:Name="Row" Orientation="Horizontal" Spacing="18" VerticalAlignment="Center">
+
+                <!-- ============ BADGE — 64x64 ============ -->
+                <Grid x:Name="BadgeHost" Width="64" Height="64" VerticalAlignment="Center">
+                    <Ellipse x:Name="BadgeBg" Width="64" Height="64" Opacity="0.18" />
+                    <Ellipse x:Name="BadgePulseRing" Width="64" Height="64" Opacity="0">
+                        <Ellipse.RenderTransform>
+                            <ScaleTransform x:Name="BadgePulseScale" CenterX="32" CenterY="32" ScaleX="1" ScaleY="1" />
+                        </Ellipse.RenderTransform>
+                    </Ellipse>
+                    <Ellipse x:Name="BadgeDot" Width="18" Height="18" Visibility="Collapsed" />
+                    <FontIcon x:Name="BadgeIcon" Glyph="&#xE783;" FontSize="28" Visibility="Collapsed" />
+                    <StackPanel x:Name="BadgeDots" Orientation="Horizontal" Spacing="5"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                        <Ellipse x:Name="Dot1" Width="6" Height="6">
+                            <Ellipse.RenderTransform>
+                                <TranslateTransform x:Name="Dot1T" Y="0" />
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
+                        <Ellipse x:Name="Dot2" Width="6" Height="6">
+                            <Ellipse.RenderTransform>
+                                <TranslateTransform x:Name="Dot2T" Y="0" />
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
+                        <Ellipse x:Name="Dot3" Width="6" Height="6">
+                            <Ellipse.RenderTransform>
+                                <TranslateTransform x:Name="Dot3T" Y="0" />
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ============ TITEL + WERT (Timer / Statustext) ============ -->
+                <StackPanel x:Name="TextHost" VerticalAlignment="Center">
+                    <TextBlock x:Name="StateLabel"
+                               FontFamily="ms-appx:///Assets/Fonts/GeistMono-Variable.ttf#Geist Mono"
+                               FontSize="14" FontWeight="Medium" CharacterSpacing="180" LineHeight="18" />
+                    <TextBlock x:Name="StateValue"
+                               FontFamily="ms-appx:///Assets/Fonts/Geist-Variable.ttf#Geist"
+                               FontSize="18" Foreground="White" Margin="0,4,0,0" LineHeight="24" />
+                </StackPanel>
+
+                <!-- ============ WAVE / PROGRESS ============ -->
+                <Grid x:Name="WaveHost" Width="220" VerticalAlignment="Center">
+                    <views:LiveWaveform x:Name="HudWave" Height="44" Visibility="Collapsed" />
+                    <ProgressBar x:Name="HudProgress" Height="6" Visibility="Collapsed"
+                                 IsIndeterminate="True" />
+                </Grid>
+
+                <!-- ============ INFO-CHIPS (optional, per Einstellung) ============ -->
+                <StackPanel x:Name="InfoHost" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Border x:Name="LangChip" BorderThickness="1" CornerRadius="6" Padding="8,3">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon x:Name="LangChipIcon" Glyph="&#xE774;" FontSize="13" />
+                            <TextBlock x:Name="LangChipText" VerticalAlignment="Center"
+                                       FontFamily="ms-appx:///Assets/Fonts/GeistMono-Variable.ttf#Geist Mono"
+                                       FontSize="14" FontWeight="Medium" />
+                        </StackPanel>
+                    </Border>
+                    <Border x:Name="MicChip" BorderThickness="1" CornerRadius="6" Padding="8,3">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon x:Name="MicChipIcon" Glyph="&#xE720;" FontSize="13" />
+                            <TextBlock x:Name="MicChipText" VerticalAlignment="Center"
+                                       FontFamily="ms-appx:///Assets/Fonts/Geist-Variable.ttf#Geist"
+                                       FontSize="14" />
+                        </StackPanel>
+                    </Border>
+                    <Border x:Name="OutChip" BorderThickness="1" CornerRadius="6" Padding="8,3">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon x:Name="OutChipIcon" Glyph="&#xE8C8;" FontSize="13" />
+                            <TextBlock x:Name="OutChipText" VerticalAlignment="Center"
+                                       FontFamily="ms-appx:///Assets/Fonts/Geist-Variable.ttf#Geist"
+                                       FontSize="14" />
+                        </StackPanel>
+                    </Border>
+                    <Border x:Name="PendingChip" BorderThickness="1" CornerRadius="6" Padding="8,3">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon x:Name="PendingChipIcon" Glyph="&#xE72C;" FontSize="13" />
+                            <TextBlock x:Name="PendingChipText" VerticalAlignment="Center"
+                                       FontFamily="ms-appx:///Assets/Fonts/Geist-Variable.ttf#Geist"
+                                       FontSize="14" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ============ HOTKEY + HINWEIS ============ -->
+                <Border x:Name="KbdPill" Visibility="Collapsed"
+                        BorderThickness="1" CornerRadius="6" Padding="10,4"
+                        VerticalAlignment="Center">
+                    <TextBlock x:Name="KbdText"
+                               FontFamily="ms-appx:///Assets/Fonts/GeistMono-Variable.ttf#Geist Mono"
+                               FontSize="15" FontWeight="Medium" />
+                </Border>
+                <TextBlock x:Name="RightInfo"
+                           FontFamily="ms-appx:///Assets/Fonts/GeistMono-Variable.ttf#Geist Mono"
+                           FontSize="14" CharacterSpacing="80"
+                           VerticalAlignment="Center" />
             </StackPanel>
         </Grid>
-
-        <!-- ============ MAIN CONTENT (state + value) ============ -->
-        <StackPanel Grid.Column="1" Margin="18,0,0,0" VerticalAlignment="Center">
-            <TextBlock x:Name="StateLabel"
-                       FontFamily="ms-appx:///Assets/Fonts/GeistMono-Variable.ttf#Geist Mono"
-                       FontSize="14" FontWeight="Medium" CharacterSpacing="180" LineHeight="18" />
-            <TextBlock x:Name="StateValue"
-                       FontFamily="ms-appx:///Assets/Fonts/Geist-Variable.ttf#Geist"
-                       FontSize="18" Foreground="White" Margin="0,4,0,0" LineHeight="24" />
-        </StackPanel>
-
-        <!-- ============ MIDDLE (wave / progress) ============ -->
-        <Grid Grid.Column="2" Margin="22,0,22,0" VerticalAlignment="Center">
-            <views:LiveWaveform x:Name="HudWave" Height="44" Visibility="Collapsed" />
-            <ProgressBar x:Name="HudProgress" Height="6" Visibility="Collapsed"
-                         IsIndeterminate="True" />
-        </Grid>
-
-        <!-- ============ RIGHT ADDON ============ -->
-        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-            <Border x:Name="KbdPill" Visibility="Collapsed"
-                    BorderThickness="1" CornerRadius="6" Padding="10,4"
-                    VerticalAlignment="Center">
-                <TextBlock x:Name="KbdText"
-                           FontFamily="ms-appx:///Assets/Fonts/GeistMono-Variable.ttf#Geist Mono"
-                           FontSize="15" FontWeight="Medium" />
-            </Border>
-            <TextBlock x:Name="RightInfo"
-                       FontFamily="ms-appx:///Assets/Fonts/GeistMono-Variable.ttf#Geist Mono"
-                       FontSize="14" CharacterSpacing="80"
-                       VerticalAlignment="Center" />
-        </StackPanel>
-    </Grid>
+    </Viewbox>
 </Window>

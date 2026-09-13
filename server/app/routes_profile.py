@@ -237,6 +237,11 @@ async def update_profile(
         profile.temperature = payload.temperature
     if payload.client_settings is not None:
         incoming_ts = payload.client_settings_updated_at or datetime.utcnow()
+        # Clients senden ISO-8601 mit "Z" (tz-aware), SQLite liefert gespeicherte Werte aber
+        # naive zurück → der Vergleich unten warf TypeError (HTTP 500, jeder Sync-Push schlug
+        # fehl). Einheitlich als naive UTC behandeln.
+        if incoming_ts.tzinfo is not None:
+            incoming_ts = (incoming_ts - incoming_ts.utcoffset()).replace(tzinfo=None)
         # Last-Write-Wins per Timestamp: nur überschreiben, wenn der eingehende Stand
         # neuer ist. So ist es egal, in welcher Reihenfolge mehrere Geräte syncen.
         if (

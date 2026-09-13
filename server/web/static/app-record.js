@@ -25,6 +25,7 @@ function recorder() {
     transcript: '',
     lastMs: 0,
     toast: '',
+    failedBlob: null,       // zuletzt fehlgeschlagene Aufnahme → erneut senden statt neu sprechen
 
     _mr: null, _stream: null, _chunks: [], _timer: null,
 
@@ -233,12 +234,23 @@ function recorder() {
         if (r.status === 401) { this.logout(); return; }
         if (!r.ok) { const e = await r.json().catch(() => ({ detail: r.statusText })); throw new Error(e.detail || 'Fehler'); }
         const data = await r.json();
-        this.transcript = data.text || '';
-        this.lastMs = data.processing_ms || 0;
-        this.setStatus(data.text ? 'Fertig.' : 'Leeres Transkript.', data.text ? 'done' : 'err');
+        if (data.text) {
+          this.transcript = data.text;
+          this.lastMs = data.processing_ms || 0;
+          if (blob === this.failedBlob) this.failedBlob = null;
+          this.setStatus('Fertig.', 'done');
+        } else {
+          this.failedBlob = blob;   // z. B. falsche Sprache → mit anderer Sprache erneut senden
+          this.setStatus('Leeres Transkript.', 'err');
+        }
       } catch (e) {
-        this.setStatus('Fehler: ' + e.message, 'err');
+        this.failedBlob = blob;
+        this.setStatus('Fehler: ' + e.message + ' — Aufnahme gespeichert.', 'err');
       } finally { this.busy = false; }
+    },
+
+    retryFailed() {
+      if (this.failedBlob && !this.busy && !this.recording) this.sendAudio(this.failedBlob);
     },
 
     // ---------- UI helpers ----------

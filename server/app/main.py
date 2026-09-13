@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
     await service.stop()
 
 
-app = FastAPI(title="VoiceAgend Server", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="VoiceAgend Server", version="1.5.0", lifespan=lifespan)
 
 app.include_router(auth_router)
 app.include_router(users_router)

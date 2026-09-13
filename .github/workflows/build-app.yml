@@ -30,7 +30,14 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $v = "1.0.$($env:GITHUB_RUN_NUMBER)"
+          # Major.Minor kommt aus client/VERSION (z. B. "1.5"). Patch = Anzahl Commits seit
+          # der letzten Änderung dieser Datei → der Bump-Commit selbst wird x.y.0, danach
+          # x.y.1, x.y.2 … Deterministisch und monoton (main wird nur per ff-only bewegt).
+          $base = (Get-Content client/VERSION -Raw).Trim()
+          if ($base -notmatch '^\d+\.\d+$') { throw "client/VERSION muss 'Major.Minor' enthalten, ist aber '$base'" }
+          $bump = git log -1 --format=%H -- client/VERSION
+          $patch = [int](git rev-list --count "$bump..HEAD")
+          $v = "$base.$patch"
           "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Building version $v"
 

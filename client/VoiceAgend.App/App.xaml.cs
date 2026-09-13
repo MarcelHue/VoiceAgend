@@ -68,6 +68,9 @@ public partial class App : Application
 
         HudWindow = new HudWindow();
         Hud = new HudController(HudWindow, () => Settings);
+        // Drag im HUD-Verschiebe-Modus → Position als "Benutzerdefiniert" übernehmen.
+        // (Hier statt im MainWindow-Konstruktor: das HUD-Fenster entsteht erst danach.)
+        HudWindow.CustomPositionPicked += (x, y) => MainWindow?.OnHudCustomPositionPicked(x, y);
         Coordinator.StatusChanged += s => Hud.OnStatus(s);
 
         Hotkey.Pressed += OnHotkeyPressed;

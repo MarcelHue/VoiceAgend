@@ -14,6 +14,9 @@ public enum HudPosition
     TopLeft, TopCenter, TopRight,
     MiddleLeft, MiddleCenter, MiddleRight,
     BottomLeft, BottomCenter, BottomRight,
+    /// <summary>Per Drag gesetzte Position (HudCustomX/Y). Am Ende angehängt, damit die
+    /// als Zahl gespeicherten bisherigen Werte gleich bleiben.</summary>
+    Custom,
 }
 
 public enum SoundChoice
@@ -90,6 +93,34 @@ public sealed class AppSettings
     public bool HudEnabled { get; set; } = true;
     public HudPosition HudPosition { get; set; } = HudPosition.TopRight;
     public int HudMargin { get; set; } = 24;
+
+    /// <summary>
+    /// Deckkraft des HUD-Hintergrunds (der dunklen Pille) in Prozent: 0 = unsichtbar,
+    /// 100 = voll deckend. Punkt, Waveform und Text bleiben immer voll deckend.
+    /// </summary>
+    public int HudBackgroundOpacity { get; set; } = 65;
+
+    /// <summary>Größen-Skalierung des HUD in Prozent (50–200).</summary>
+    public int HudScale { get; set; } = 100;
+
+    /// <summary>
+    /// Per Drag abgelegte Position (obere linke Ecke, physische Pixel) für HudPosition.Custom.
+    /// Bewusst NICHT gesynct — hängt am Monitor-Layout des jeweiligen Geräts.
+    /// </summary>
+    public int? HudCustomX { get; set; }
+    public int? HudCustomY { get; set; }
+
+    // Einzeln ein-/ausblendbare HUD-Elemente. Die Pille passt ihre Breite automatisch an.
+    public bool HudShowBadge { get; set; } = true;
+    public bool HudShowTitle { get; set; } = true;
+    public bool HudShowValue { get; set; } = true;
+    public bool HudShowWaveform { get; set; } = true;
+    public bool HudShowHotkey { get; set; } = true;
+    public bool HudShowHint { get; set; } = true;
+    public bool HudShowLanguage { get; set; } = true;
+    public bool HudShowMic { get; set; } = false;
+    public bool HudShowOutput { get; set; } = false;
+    public bool HudShowPending { get; set; } = true;
 
     public string HotkeyDisplay()
     {

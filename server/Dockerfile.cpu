@@ -10,6 +10,7 @@ RUN python -m pip install --upgrade pip && python -m pip install -r requirements
 
 COPY app ./app
 COPY web ./web
+COPY scripts ./scripts
 
 ENV VOICEAGEND_DATA_DIR=/data
 

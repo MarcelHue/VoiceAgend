@@ -50,6 +50,32 @@ public sealed class HudController
 
     public void Hide() => OnUi(() => _window.Hide());
 
+    /// <summary>Einstellungsänderung (Elemente, Größe, Deckkraft) sofort auf ein sichtbares HUD anwenden.</summary>
+    public void RefreshLayout() => _window.RefreshLayout();
+
+    public bool IsEditMode { get; private set; }
+
+    /// <summary>
+    /// Verschiebe-Modus: HUD sichtbar und greifbar (nicht klick-durchlässig) — auch wenn es
+    /// in den Einstellungen deaktiviert ist, sonst könnte man es gar nicht positionieren.
+    /// </summary>
+    public void SetEditMode(bool on) => OnUi(() =>
+    {
+        if (IsEditMode == on) return;
+        IsEditMode = on;
+        _window.SetEditMode(on);
+        if (on)
+        {
+            var s = _settings();
+            _window.ApplyPosition(s.HudPosition, s.HudMargin);
+            _window.Show(HudState.Recording, "");
+        }
+        else if (!App.Current.Coordinator.IsRecording)
+        {
+            _window.Hide();
+        }
+    });
+
     public void OnStatus(string status)
     {
         // Mappt freie Status-Strings auf HUD-States.

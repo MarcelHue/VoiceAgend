@@ -81,6 +81,10 @@
         <div class="statusline" :class="statusClass">
           <span class="sdot"></span><span x-text="status"></span>
         </div>
+        <div class="row" x-show="failedBlob && !recording" style="justify-content:center;flex:0 0 auto">
+          <button class="primary" @click="retryFailed()" :disabled="busy" style="flex:0 0 auto">Erneut senden</button>
+          <button class="ghost" @click="failedBlob=null; setStatus('Aufnahme verworfen.', '')" :disabled="busy" style="flex:0 0 auto">Verwerfen</button>
+        </div>
         <div class="langrow">
           <template x-for="code in languageOptions" :key="code || 'auto'">
             <button class="langpill" :class="{active: code === language}" @click="setLanguage(code)"
