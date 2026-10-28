@@ -93,11 +93,17 @@ jobs:
             --publish `
             --merge
 
-      - name: Upload build artifacts (debug)
+      # Only on failure, so a failed release upload can be finished by hand. publish/ and the
+      # packages downloaded from older releases are left out: the artifact quota (500 MB) is
+      # shared by every repo of the account.
+      - name: Upload release packages (failed run only)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-output
+          name: release-packages
+          retention-days: 3
+          if-no-files-found: ignore
           path: |
-            publish/
             releases/
+            !releases/*.nupkg
+            releases/*${{ steps.version.outputs.version }}*.nupkg

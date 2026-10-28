@@ -51,6 +51,9 @@ jobs:
 
       - name: Build & push
         uses: docker/build-push-action@v6
+        env:
+          # The build record (*.dockerbuild) would otherwise be stored as an artifact for 90 days.
+          DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: ./server
           file: ./server/Dockerfile.cpu
